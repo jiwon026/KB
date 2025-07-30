@@ -94,11 +94,8 @@ def simulate_with_investment(current_age, end_age, current_assets, monthly_incom
                                  inflation_rate=0.03, investment_return=0.05)
 
 # 📌 투자상품 적용 시
-def simulate_with_investment(current_age, end_age, current_assets, monthly_income, monthly_expense):
-    return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
-                                 inflation_rate=0.03, investment_return=0.05)
-
-
+def recommend_financial_product(depletion_base, current_age, current_assets,
+                                 monthly_income, monthly_expense, risk_level):
     surplus = monthly_income - monthly_expense
     if surplus > 0:
         if risk_level == '공격형':
@@ -121,6 +118,7 @@ def simulate_with_investment(current_age, end_age, current_assets, monthly_incom
             "추천": "📉 소비조절 컨설팅 또는 소액 적립식 저축",
             "이유": "현재 지출이 소득보다 많아 자산이 줄고 있어 소비 구조 조정이 우선입니다."
         }
+
 
 # 📌 Streamlit 인터페이스
 st.title("🧓 국민연금 기반 노후 시뮬레이션")
