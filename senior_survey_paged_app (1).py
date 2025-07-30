@@ -2,13 +2,10 @@ import streamlit as st
 import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-from matplotlib import rc
-import stremalit as st
+import plotly.express as px
 
-rc('fomt', family ='MalgunGothic')
 
-# 마이너스 폰트 깨짐 방지
+plt.rcParams['font.family'] = "Malgun Gothic"
 plt.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
