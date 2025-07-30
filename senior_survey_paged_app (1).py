@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 
 # 📌 데이터 로딩 
@@ -168,6 +169,9 @@ st.markdown(f"""
 - 추천 상품: {recommendation['추천']}  
 - 추천 이유: {recommendation['이유']}
 """)
+# 한글 폰트 설정
+plt.rcParams['font.family'] = 'NanumGothic'  # 또는 'Malgun Gothic', 'AppleGothic' (Mac), 'DejaVu Sans' (리눅스)
+plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
 
 # 📌 그래프 시각화
 df_base = pd.DataFrame(log_base)
