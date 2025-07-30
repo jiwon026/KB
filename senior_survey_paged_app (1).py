@@ -5,13 +5,18 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import os
 
-# ✅ 정확한 경로로 폰트 불러오기
-font_path = os.path.join(os.path.dirname(__file__), "fonts", "NanumGothic.ttf")
-if not os.path.exists(font_path):
-    raise FileNotFoundError(f"폰트 파일이 존재하지 않습니다: {font_path}")
+# 현재 파일과 같은 위치의 폰트 경로 지정
+font_path = os.path.join(os.path.dirname(__file__), "NanumGothic-Regular.ttf")
 
+# 파일이 존재하는지 확인
+if not os.path.exists(font_path):
+    raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
+
+# 폰트 속성 설정
 fontprop = fm.FontProperties(fname=font_path)
 plt.rc('font', family=fontprop.get_name())
+
+# 마이너스 폰트 깨짐 방지
 mpl.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
