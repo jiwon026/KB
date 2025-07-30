@@ -6,7 +6,7 @@ import matplotlib as mpl
 from matplotlib import rc
 import stremalit as st
 
-rc('fomt', family ='AppleGothic')
+rc('fomt', family ='MalgunGothic')
 
 # 마이너스 폰트 깨짐 방지
 plt.rcParams['axes.unicode_minus'] = False
