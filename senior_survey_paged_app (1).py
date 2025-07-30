@@ -54,4 +54,4 @@ if uploaded_file is not None:
     st.line_chart({
         "기본 시나리오 (2%)": df_base.set_index("나이")["잔액"],
         "금융상품 시나리오 (5%)": df_invest.set_index("나이")["잔액"]
-    })
+    }) 
