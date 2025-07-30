@@ -3,10 +3,21 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import os
 
-# 한글 폰트 설정
-plt.rcParams['font.family'] = 'NanumGothic'  # 또는 'Malgun Gothic', 'AppleGothic' (Mac), 'DejaVu Sans' (리눅스)
-plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
+# 📌 NanumGothic 폰트 설치
+font_url = "https://github.com/naver/nanumfont/blob/master/ttf/NanumGothic.ttf?raw=true"
+font_path = "/tmp/NanumGothic.ttf"
+
+if not os.path.exists(font_path):
+    import urllib.request
+    urllib.request.urlretrieve(font_url, font_path)
+
+# 📌 matplotlib에 폰트 등록
+fm.fontManager.addfont(font_path)
+plt.rcParams['font.family'] = 'NanumGothic'
+plt.rcParams['axes.unicode_minus'] = False
 
 
 # 📌 데이터 로딩 
