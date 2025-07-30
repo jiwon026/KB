@@ -7,3 +7,4 @@ streamlit-folium
 pillow
 matplotlib
 os
+urllib
