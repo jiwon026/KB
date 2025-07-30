@@ -2,16 +2,15 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# 📌 데이터 로딩 
+# 📌 데이터 로딩 (같은 폴더에 있어야 함)
 @st.cache_data
 def load_data():
-    file_path = "(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별.csv"
+    file_path = "노령연금_수급자통계.csv"
     return pd.read_csv(file_path, encoding='cp949')
 
 df = load_data()
 
-
-# 📌 대표값 설정
+# 📌 월 수급 구간 대표값 설정
 representative_values = {
     "20만원 미만": 10,
     "20만원∼40만원 미만": 30,
@@ -24,23 +23,18 @@ representative_values = {
     "200만원 이상": 210
 }
 
-# 📌 연금 수령액 추정 함수
+# 📌 국민연금 수령액 추정
 def estimate_average_pension(df, gender='여자', period='가입기간 10~19년'):
     column_map = {
-        '가입기간 10~19년': {
-            '남자': '남자(가입기간 10~19년)',
-            '여자': '여자(가입기간 10~19년)'
-        },
-        '가입기간 20년 이상': {
-            '남자': '남자(가입기간 20년이상)',
-            '여자': '여자(가입기간 20년이상)'
-        },
-        '조기': {
-            '남자': '남자(조기)',
-            '여자': '여자(조기)'
-        }
+        '가입기간 10~19년': {'남자': '남자(가입기간 10~19년)', '여자': '여자(가입기간 10~19년)'},
+        '가입기간 20년이상': {'남자': '남자(가입기간 20년이상)', '여자': '여자(가입기간 20년이상)'},
+        '조기': {'남자': '남자(조기)', '여자': '여자(조기)'}
     }
-    target_col = column_map[period][gender]
+    try:
+        target_col = column_map[period][gender]
+    except KeyError:
+        return None
+
     total_people = 0
     total_amount = 0
 
@@ -70,7 +64,6 @@ def retirement_simulation(current_age, end_age, current_assets, monthly_income, 
         annual_expense = expense * 12
         delta = annual_income - annual_expense
         asset += delta
-
         if asset > 0:
             asset *= (1 + investment_return)
 
@@ -95,14 +88,11 @@ def simulate_with_investment(current_age, end_age, current_assets, monthly_incom
     return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                  inflation_rate=0.03, investment_return=0.05)
 
+# 📌 투자상품 적용 시
+def simulate_with_investment(current_age, end_age, current_assets, monthly_income, monthly_expense):
+    return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                 inflation_rate=0.03, investment_return=0.05)
 
-# 📌 금융상품 추천
-def recommend_financial_product(depletion_age, current_age, current_assets, monthly_income, monthly_expense, risk_level):
-    if depletion_age:
-        return {
-            "추천": "💡 연금형 금융상품",
-            "이유": f"{depletion_age}세에 자산 고갈이 예상되므로, 매달 일정 수입을 주는 상품이 적합합니다."
-        }
 
     surplus = monthly_income - monthly_expense
     if surplus > 0:
@@ -127,11 +117,10 @@ def recommend_financial_product(depletion_age, current_age, current_assets, mont
             "이유": "현재 지출이 소득보다 많아 자산이 줄고 있어 소비 구조 조정이 우선입니다."
         }
 
-# 📌 Streamlit 시작
-st.set_page_config(page_title="노후 시나리오 시뮬레이터", page_icon="💸")
-st.title("💸 노후 시나리오 시뮬레이터")
+# 📌 Streamlit 인터페이스
+st.title("🧓 국민연금 기반 노후 시뮬레이션")
+st.write("📊 국민연금 통계 기반 자동 계산")
 
-# 사용자 입력
 col1, col2 = st.columns(2)
 gender = col1.selectbox("성별", ['남자', '여자'])
 period = col2.selectbox("수급 유형", ['가입기간 10~19년', '가입기간 20년이상', '조기'])
@@ -168,7 +157,6 @@ st.markdown(f"""
 - 추천 상품: {recommendation['추천']}  
 - 추천 이유: {recommendation['이유']}
 """)
-
 
 # 📌 그래프 시각화
 df_base = pd.DataFrame(log_base)
