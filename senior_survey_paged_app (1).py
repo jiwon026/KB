@@ -2,20 +2,21 @@ import streamlit as st
 import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
-import matplotlib as mpl  # ✅ 이 줄이 반드시 있어야 함
+import os
 
-# 여러 한글 폰트 후보 중 시스템에 설치된 것을 우선 적용
-font_candidates = ['NanumGothic', 'Malgun Gothic', 'AppleGothic', 'Arial']
-for font in font_candidates:
-    try:
-        mpl.rc('font', family=font)
-        print(f"✅ 한글 폰트 적용됨: {font}")
-        break
-    except:
-        continue
+# ❗ 폰트 다운로드 경로와 이름 설정
+font_url = "https://github.com/google/fonts/blob/main/ofl/nanumgothic/NanumGothic-Regular.ttf?raw=true"
+font_path = "NanumGothic-Regular.ttf"
 
-# 음수 깨짐 방지
-mpl.rcParams['axes.unicode_minus'] = False
+# 다운로드 & 저장
+if not os.path.exists(font_path):
+    import urllib.request
+    urllib.request.urlretrieve(font_url, font_path)
+
+# matplotlib에 폰트 적용
+fontprop = fm.FontProperties(fname=font_path)
+plt.rc('font', family=fontprop.get_name())
+plt.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
 @st.cache_data
