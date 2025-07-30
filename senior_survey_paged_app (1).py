@@ -2,21 +2,18 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-import os
-import urllib.request
+import platform
 
-# ✅ 올바른 NanumGothic 다운로드 링크 (직접 다운로드 가능)
-font_url = "https://github.com/team-monolith/resources/blob/main/fonts/NanumGothic.ttf?raw=true"
-font_path = "/tmp/NanumGothic.ttf"
+# 시스템에 따라 기본 한글 폰트 설정
+if platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'  # 윈도우
+elif platform.system() == 'Darwin':
+    plt.rcParams['font.family'] = 'AppleGothic'    # 맥
+else:
+    plt.rcParams['font.family'] = 'DejaVu Sans'     # 리눅스 (한글 포함 안됨 주의)
 
-# ✅ 폰트가 없으면 다운로드
-if not os.path.exists(font_path):
-    urllib.request.urlretrieve(font_url, font_path)
+plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
 
-# ✅ 폰트 등록
-fm.fontManager.addfont(font_path)
-plt.rcParams['font.family'] = 'NanumGothic'
-plt.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 
 @st.cache_data
