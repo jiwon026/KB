@@ -1,17 +1,17 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
+from streamlit_folium import folium_static
+import folium
 
-# 한글 폰트 설정
-plt.rcParams['font.family'] = 'NanumGothic'  # 또는 'Malgun Gothic', 'AppleGothic' (Mac), 'DejaVu Sans' (리눅스)
-plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
+# 📌 폰트 설정 (한글 깨짐 방지)
+plt.rcParams['font.family'] = 'NanumGothic'  # or 'Malgun Gothic'
+plt.rcParams['axes.unicode_minus'] = False
 
-# 📌 데이터 로딩 (같은 폴더에 있어야 함)
+# 📌 데이터 로딩
 @st.cache_data
 def load_data():
-    file_path = "(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별.csv"
-    return pd.read_csv(file_path, encoding='cp949')
+    return pd.read_csv("(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별.csv", encoding='cp949')
 
 df = load_data()
 
@@ -28,7 +28,7 @@ representative_values = {
     "200만원 이상": 210
 }
 
-# 📌 국민연금 수령액 추정
+# 📌 연금 수령액 추정
 def estimate_average_pension(df, gender='여자', period='가입기간 10~19년'):
     column_map = {
         '가입기간 10~19년': {'남자': '남자(가입기간 10~19년)', '여자': '여자(가입기간 10~19년)'},
@@ -56,7 +56,7 @@ def estimate_average_pension(df, gender='여자', period='가입기간 10~19년'
     else:
         return round(total_amount / total_people, 1)
 
-# 📌 시뮬레이션 함수
+# 📌 시뮬레이션
 def retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                           inflation_rate=0.03, investment_return=0.02):
     asset = current_assets
@@ -88,12 +88,12 @@ def retirement_simulation(current_age, end_age, current_assets, monthly_income, 
 
     return yearly_log, depletion_age
 
-# 📌 투자상품 적용 시
+# 📌 투자 시뮬레이션
 def simulate_with_investment(current_age, end_age, current_assets, monthly_income, monthly_expense):
     return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                  inflation_rate=0.03, investment_return=0.05)
 
-# 📌 투자상품 적용 시
+# 📌 금융상품 추천
 def recommend_financial_product(depletion_base, current_age, current_assets,
                                  monthly_income, monthly_expense, risk_level):
     surplus = monthly_income - monthly_expense
@@ -119,14 +119,13 @@ def recommend_financial_product(depletion_base, current_age, current_assets,
             "이유": "현재 지출이 소득보다 많아 자산이 줄고 있어 소비 구조 조정이 우선입니다."
         }
 
-
-# 📌 Streamlit 인터페이스
-st.title("🧓 국민연금 기반 노후 시뮬레이션")
-st.write("📊 국민연금 통계 기반 자동 계산")
+# 📌 Streamlit UI
+st.title("🧓 국민연금 기반 노후 시뮬레이션 + 투자전략")
 
 col1, col2 = st.columns(2)
 gender = col1.selectbox("성별", ['남자', '여자'])
 period = col2.selectbox("수급 유형", ['가입기간 10~19년', '가입기간 20년이상', '조기'])
+
 current_age = st.slider("현재 나이", 60, 80, 67)
 end_age = st.slider("예상 수명", 85, 100, 95)
 current_assets = st.number_input("현재 자산 (만원)", 0, 100000, 9000)
@@ -148,7 +147,7 @@ log_invest, depletion_invest = simulate_with_investment(current_age, end_age, cu
 recommendation = recommend_financial_product(depletion_base, current_age, current_assets,
                                              monthly_income, monthly_expense, risk_level)
 
-# 📌 결과 출력
+# 📌 출력
 st.success(f"▶️ 자동 추정된 국민연금 수령액: {estimated_pension}만원/월")
 if depletion_base:
     st.warning(f"⚠️ 현재 지출 기준으로는 약 **{depletion_base}세**에 자산이 고갈될 수 있어요.")
@@ -161,7 +160,7 @@ st.markdown(f"""
 - 추천 이유: {recommendation['이유']}
 """)
 
-# 📌 그래프 시각화
+# 📌 그래프
 df_base = pd.DataFrame(log_base)
 df_invest = pd.DataFrame(log_invest)
 
@@ -175,3 +174,9 @@ ax.set_ylabel("잔액 (만원)")
 ax.legend()
 ax.grid(True)
 st.pyplot(fig)
+
+# 📌 folium 지도 시각화 (예시)
+st.header("📍 지도 예시: 시뮬레이션 서비스 제공 지역")
+map = folium.Map(location=[37.5665, 126.9780], zoom_start=11)
+folium.Marker([37.5665, 126.9780], tooltip="서울시청", popup="중앙 서비스 센터").add_to(map)
+folium_static(map)
