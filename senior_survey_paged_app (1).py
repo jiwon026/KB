@@ -90,10 +90,11 @@ def retirement_simulation(current_age, end_age, current_assets, monthly_income, 
 
     return yearly_log, depletion_age
 
-# 📌 금융상품 적용 시 시뮬레이션
-def simulate_with_financial_product(current_age, end_age, current_assets, monthly_income, monthly_expense):
+# 📌 투자상품 적용 시
+def simulate_with_investment(current_age, end_age, current_assets, monthly_income, monthly_expense):
     return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                  inflation_rate=0.03, investment_return=0.05)
+
 
 # 📌 금융상품 추천
 def recommend_financial_product(depletion_age, current_age, current_assets, monthly_income, monthly_expense, risk_level):
