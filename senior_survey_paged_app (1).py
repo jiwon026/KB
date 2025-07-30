@@ -2,6 +2,15 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# 📌 데이터 로딩 
+@st.cache_data
+def load_data():
+    file_path = "(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별.csv"
+    return pd.read_csv(file_path, encoding='cp949')
+
+df = load_data()
+
+
 # 📌 대표값 설정
 representative_values = {
     "20만원 미만": 10,
