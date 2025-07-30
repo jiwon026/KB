@@ -18,7 +18,7 @@ monthly_expense = st.number_input("월 지출 예상 (만원)", value=130)
 other_income = st.number_input("기타 월 수입 (만원)", value=10)
 
 # 📁 CSV 파일 불러오기
-uploaded_file = st.file_uploader("국민연금 데이터 파일 업로드 (csv)", type=["csv"])
+uploaded_file = st.file_uploader("(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별", type=["csv"])
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file, encoding='cp949')
     
