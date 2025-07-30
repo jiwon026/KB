@@ -3,20 +3,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import os
+import urllib.request
 
-# 📌 NanumGothic 폰트 설치
-font_url = "https://github.com/naver/nanumfont/blob/master/ttf/NanumGothic.ttf?raw=true"
+# ✅ 올바른 NanumGothic 다운로드 링크 (직접 다운로드 가능)
+font_url = "https://github.com/team-monolith/resources/blob/main/fonts/NanumGothic.ttf?raw=true"
 font_path = "/tmp/NanumGothic.ttf"
 
+# ✅ 폰트가 없으면 다운로드
 if not os.path.exists(font_path):
-    import urllib.request
     urllib.request.urlretrieve(font_url, font_path)
 
-# 📌 matplotlib에 폰트 등록
+# ✅ 폰트 등록
 fm.fontManager.addfont(font_path)
 plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
-
 
 # 📌 데이터 로딩 
 @st.cache_data
