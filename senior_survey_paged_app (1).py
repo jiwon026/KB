@@ -1,72 +1,57 @@
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="시니어 금융 설문", page_icon="💸", layout="centered")
+# 📌 대표값과 수령액 추정 함수는 기존 코드에서 그대로 사용 가능
 
-st.markdown("### 💬 시니어 금융 유형 설문")
-st.markdown("**아래 질문에 순차적으로 응답해주세요.**")
+# 👉 사용자 입력
+st.title("💰 노후 시나리오 시뮬레이터")
 
-if "page" not in st.session_state:
-    st.session_state.page = 0
-if "responses" not in st.session_state:
-    st.session_state.responses = {}
+gender = st.selectbox("성별을 선택하세요", ["남자", "여자"])
+period = st.selectbox("연금 가입 기간", ["가입기간 10~19년", "가입기간 20년 이상", "조기"])
+risk_tolerance = st.selectbox("위험 성향", ["낮음", "중간", "높음"])
 
-questions = [
-    ("나이를 입력해주세요.", "number", "age"),
-    ("성별을 선택해주세요.", "selectbox", "gender", ["남성", "여성"]),
-    ("가구원 수를 입력해주세요.", "number", "family_size"),
-    ("현재 보유한 금융자산(만원)을 입력해주세요.", "number", "assets"),
-    ("월 수령하는 연금 금액(만원)을 입력해주세요.", "number", "pension"),
-    ("월 평균 생활비(만원)은 얼마인가요?", "number", "living_cost"),
-    ("월 평균 취미/여가비(만원)는 얼마인가요?", "number", "hobby_cost"),
-    ("투자 성향을 선택해주세요.", "selectbox", "risk", ["안정형", "중립형", "공격형"])
-]
+current_age = st.slider("현재 나이", 55, 80, 67)
+end_age = st.slider("예상 생존 나이", 85, 110, 100)
+current_assets = st.number_input("현재 자산 (만원)", value=9000)
+monthly_expense = st.number_input("월 지출 예상 (만원)", value=130)
+other_income = st.number_input("기타 월 수입 (만원)", value=10)
 
-def next_page():
-    if st.session_state.get("input_value") is not None:
-        current_q = questions[st.session_state.page]
-        st.session_state.responses[current_q[2]] = st.session_state.input_value
-        st.session_state.page += 1
-        st.session_state.input_value = None
+# 📁 CSV 파일 불러오기
+uploaded_file = st.file_uploader("국민연금 데이터 파일 업로드 (csv)", type=["csv"])
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file, encoding='cp949')
+    
+    estimated_pension = estimate_average_pension(df, gender, period)
+    monthly_income = estimated_pension + other_income
 
-if st.session_state.page < len(questions):
-    q = questions[st.session_state.page]
-    st.markdown(f"**Q{st.session_state.page + 1}. {q[0]}**")
+    # 💡 시뮬레이션 실행
+    base_log, base_depletion = retirement_simulation(
+        current_age, end_age, current_assets, monthly_income, monthly_expense
+    )
+    invest_log, invest_depletion = simulate_with_financial_product(
+        current_age, end_age, current_assets, monthly_income, monthly_expense
+    )
+    recommendation = recommend_financial_product(
+        base_depletion, current_age, current_assets,
+        monthly_income, monthly_expense, risk_tolerance
+    )
 
-    if q[1] == "number":
-        st.number_input(
-            label=" ",
-            key="input_value",
-            step=1,
-            format="%d",
-            on_change=next_page,
-            label_visibility="collapsed"
-        )
-    elif q[1] == "selectbox":
-        st.selectbox(
-            label=" ",
-            options=q[3],
-            key="input_value",
-            on_change=next_page,
-            label_visibility="collapsed"
-        )
-else:
-    st.success("✅ 모든 질문에 응답하셨습니다!")
-    r = st.session_state.responses
-
-    # 점수화 예시
-    score = 0
-    score += (r["assets"] or 0) * 0.003
-    score += (r["pension"] or 0) * 0.05
-    score -= (r["living_cost"] or 0) * 0.02
-    score -= (r["hobby_cost"] or 0) * 0.01
-    score += 1.0 if r["risk"] == "공격형" else (-0.5 if r["risk"] == "안정형" else 0)
-
-    if score >= 7:
-        category = "자산운용형"
-    elif score >= 4:
-        category = "균형형"
+    # 💬 결과 출력
+    st.markdown(f"### ▶️ 예상 국민연금 수령액: **{estimated_pension}만원/월**")
+    if base_depletion:
+        st.warning(f"⚠️ 자산이 **{base_depletion}세**에 고갈될 수 있습니다.")
     else:
-        category = "안정추구형"
+        st.success("🎉 자산이 고갈되지 않고 유지될 수 있어요!")
 
-    st.markdown(f"### 🧾 결과: **{category}**")
-    st.markdown("👉 당신에게 맞는 금융 상품을 추천해드릴게요.")
+    st.markdown(f"### ✅ 추천 상품: **{recommendation['추천']}**")
+    st.markdown(f"📌 추천 이유: {recommendation['이유']}")
+
+    # 📊 시각화
+    df_base = pd.DataFrame(base_log)
+    df_invest = pd.DataFrame(invest_log)
+
+    st.line_chart({
+        "기본 시나리오 (2%)": df_base.set_index("나이")["잔액"],
+        "금융상품 시나리오 (5%)": df_invest.set_index("나이")["잔액"]
+    })
