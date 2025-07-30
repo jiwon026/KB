@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
+import matplotlib as mpl  # ✅ 이 줄이 반드시 있어야 함
 
 # 여러 한글 폰트 후보 중 시스템에 설치된 것을 우선 적용
 font_candidates = ['NanumGothic', 'Malgun Gothic', 'AppleGothic', 'Arial']
