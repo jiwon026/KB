@@ -95,8 +95,8 @@ def simulate_with_financial_product(current_age, end_age, current_assets, monthl
     return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                  inflation_rate=0.03, investment_return=0.05)
 
-# 📌 맞춤형 추천 로직
-def recommend_financial_product(depletion_age, current_age, current_assets, monthly_income, monthly_expense, risk):
+# 📌 금융상품 추천
+def recommend_financial_product(depletion_age, current_age, current_assets, monthly_income, monthly_expense, risk_level):
     if depletion_age:
         return {
             "추천": "💡 연금형 금융상품",
@@ -105,95 +105,80 @@ def recommend_financial_product(depletion_age, current_age, current_assets, mont
 
     surplus = monthly_income - monthly_expense
     if surplus > 0:
-        if risk == "높음":
+        if risk_level == '공격형':
             return {
-                "추천": "📈 주식형 펀드 / ETF",
-                "이유": "높은 수익률을 기대하는 성향이므로 주식형 상품이 적합합니다."
+                "추천": "📊 고위험 자산 (해외 ETF, AI펀드 등)",
+                "이유": "위험 감수 성향이 높고, 수입이 지출보다 많기 때문에 적극적 투자 가능"
             }
-        elif risk == "중간":
+        elif risk_level == '중립형':
             return {
-                "추천": "📊 혼합형 펀드 / 채권 ETF",
-                "이유": "중간 수준의 위험 감수 성향에는 안정성과 수익성이 균형 잡힌 상품이 적절합니다."
+                "추천": "📈 중위험 자산 (국내 ETF, 채권혼합형 등)",
+                "이유": "안정성과 수익성을 균형 있게 고려한 포트폴리오 추천"
             }
-        else:  # 위험 성향 낮음
-            if current_assets > 20000:
-                return {
-                    "추천": "🏦 정기예금 / 채권형 펀드",
-                    "이유": "자산이 넉넉한 편이므로 안정적 상품으로 보존이 유리합니다."
-                }
-            else:
-                return {
-                    "추천": "🔐 원금보장형 상품 (ELB 등)",
-                    "이유": "자산이 많지 않으므로 손실 없는 안정적 상품이 우선입니다."
-                }
-    return {
-        "추천": "📉 소비 구조 점검 및 지출 조정 컨설팅",
-        "이유": "지출이 수입보다 많아 저축이 어려우므로, 소비 개선이 필요합니다."
-    }
+        else:
+            return {
+                "추천": "🏦 정기예금 또는 원금보장형 상품",
+                "이유": "안전 위주의 투자 성향으로, 예적금 또는 원금보장 상품이 적합"
+            }
+    else:
+        return {
+            "추천": "📉 소비조절 컨설팅 또는 소액 적립식 저축",
+            "이유": "현재 지출이 소득보다 많아 자산이 줄고 있어 소비 구조 조정이 우선입니다."
+        }
 
 # 📌 Streamlit 시작
 st.set_page_config(page_title="노후 시나리오 시뮬레이터", page_icon="💸")
 st.title("💸 노후 시나리오 시뮬레이터")
 
 # 사용자 입력
-with st.sidebar:
-    st.header("📝 사용자 입력")
-    gender = st.selectbox("성별", ["남자", "여자"])
-    period = st.selectbox("국민연금 가입기간", ["가입기간 10~19년", "가입기간 20년 이상", "조기"])
-    risk = st.radio("📊 위험 성향", ["낮음", "중간", "높음"])
+col1, col2 = st.columns(2)
+gender = col1.selectbox("성별", ['남자', '여자'])
+period = col2.selectbox("수급 유형", ['가입기간 10~19년', '가입기간 20년이상', '조기'])
+current_age = st.slider("현재 나이", 60, 80, 67)
+end_age = st.slider("예상 수명", 85, 100, 95)
+current_assets = st.number_input("현재 자산 (만원)", 0, 100000, 9000)
+monthly_expense = st.number_input("월 지출 (만원)", 50, 300, 130)
+other_income = st.number_input("기타 월 수입 (만원)", 0, 200, 10)
+risk_level = st.radio("투자 성향", ['안정형', '중립형', '공격형'])
 
-    current_age = st.slider("현재 나이", 55, 80, 67)
-    end_age = st.slider("예상 수명", 85, 110, 100)
-    current_assets = st.number_input("현재 자산 (만원)", value=9000)
-    monthly_expense = st.number_input("월 지출 예상 (만원)", value=130)
-    other_income = st.number_input("기타 월 수입 (만원)", value=10)
-    uploaded_file = st.file_uploader("📁 국민연금 수급자 통계 파일 업로드 (CSV)", type=["csv"])
+# 📌 실행
+estimated_pension = estimate_average_pension(df, gender, period)
+if estimated_pension is None:
+    st.error("해당 조건의 국민연금 데이터를 찾을 수 없습니다.")
+    st.stop()
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file, encoding='cp949')
-    estimated_pension = estimate_average_pension(df, gender, period)
-    if estimated_pension is None:
-        st.error("❌ 유효한 연금 수급액을 계산할 수 없습니다. 파일을 확인해주세요.")
-    else:
-        monthly_income = estimated_pension + other_income
+monthly_income = estimated_pension + other_income
+log_base, depletion_base = retirement_simulation(current_age, end_age, current_assets,
+                                                 monthly_income, monthly_expense)
+log_invest, depletion_invest = simulate_with_investment(current_age, end_age, current_assets,
+                                                        monthly_income, monthly_expense)
+recommendation = recommend_financial_product(depletion_base, current_age, current_assets,
+                                             monthly_income, monthly_expense, risk_level)
 
-        log_base, depletion_base = retirement_simulation(
-            current_age, end_age, current_assets, monthly_income, monthly_expense
-        )
-        log_invest, depletion_invest = simulate_with_financial_product(
-            current_age, end_age, current_assets, monthly_income, monthly_expense
-        )
-
-        recommendation = recommend_financial_product(
-            depletion_base, current_age, current_assets,
-            monthly_income, monthly_expense, risk
-        )
-
-        st.subheader("📌 결과 요약")
-        st.markdown(f"▶️ 자동 추정된 국민연금 수령액: **{estimated_pension}만원/월**")
-        if depletion_base:
-            st.warning(f"⚠️ 자산은 **{depletion_base}세**에 고갈될 수 있어요.")
-        else:
-            st.success("🎉 자산이 고갈되지 않고 유지될 수 있어요!")
-
-        st.markdown("### ✅ [맞춤형 금융상품 추천]")
-        st.markdown(f"- **추천 상품**: {recommendation['추천']}")
-        st.markdown(f"- **추천 이유**: {recommendation['이유']}")
-
-        # 📊 자산 추이 시각화
-        df_base = pd.DataFrame(log_base)
-        df_invest = pd.DataFrame(log_invest)
-
-        st.subheader("📈 자산 시나리오 비교")
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(df_base['나이'], df_base['잔액'], label='기본 시나리오 (2%)')
-        ax.plot(df_invest['나이'], df_invest['잔액'], label='금융상품 적용 (5%)', linestyle='--')
-        ax.axhline(0, color='gray', linestyle=':')
-        ax.set_xlabel("나이")
-        ax.set_ylabel("잔액 (만원)")
-        ax.set_title("자산 변화 비교 그래프")
-        ax.legend()
-        ax.grid(True)
-        st.pyplot(fig)
+# 📌 결과 출력
+st.success(f"▶️ 자동 추정된 국민연금 수령액: {estimated_pension}만원/월")
+if depletion_base:
+    st.warning(f"⚠️ 현재 지출 기준으로는 약 **{depletion_base}세**에 자산이 고갈될 수 있어요.")
 else:
-    st.info("📁 국민연금 수급자 파일을 업로드하면 분석이 시작됩니다.")
+    st.info("🎉 자산이 고갈되지 않고 유지될 수 있어요.")
+
+st.markdown(f"""
+✅ **[맞춤형 금융상품 추천]**  
+- 추천 상품: {recommendation['추천']}  
+- 추천 이유: {recommendation['이유']}
+""")
+
+# 📌 그래프 시각화
+df_base = pd.DataFrame(log_base)
+df_invest = pd.DataFrame(log_invest)
+
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(df_base['나이'], df_base['잔액'], label='기본 시나리오 (2%)')
+ax.plot(df_invest['나이'], df_invest['잔액'], label='투자 시나리오 (5%)', linestyle='--')
+ax.axhline(0, color='gray', linestyle=':')
+ax.set_title("💰 자산 시나리오 비교")
+ax.set_xlabel("나이")
+ax.set_ylabel("잔액 (만원)")
+ax.legend()
+ax.grid(True)
+st.pyplot(fig)
