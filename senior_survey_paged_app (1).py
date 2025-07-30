@@ -1,19 +1,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-import platform
-
-# 시스템에 따라 기본 한글 폰트 설정
-if platform.system() == 'Windows':
-    plt.rcParams['font.family'] = 'Malgun Gothic'  # 윈도우
-elif platform.system() == 'Darwin':
-    plt.rcParams['font.family'] = 'AppleGothic'    # 맥
-else:
-    plt.rcParams['font.family'] = 'DejaVu Sans'     # 리눅스 (한글 포함 안됨 주의)
-
-plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
-
 
 # 📌 데이터 로딩 
 @st.cache_data
