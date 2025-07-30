@@ -6,7 +6,7 @@ import matplotlib as mpl
 import os
 
 # ✅ 폰트 경로 지정
-font_path = os.path.join("fonts", "NanumGothic.ttf")  # 폴더 경로와 파일명 확인 필요
+font_path = os.path.join("fonts", "NanumGothic-Regular.ttf")  # 폴더 경로와 파일명 확인 필요
 fontprop = fm.FontProperties(fname=font_path)
 
 # ✅ matplotlib에 폰트 적용
