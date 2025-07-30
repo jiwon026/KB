@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
 @st.cache_data
 def load_data():
-    file_path = "노령연금_수급자통계.csv"
+    file_path = "(202503공시)2-6-1 노령연금 수급자 수-노령연금 종류별성별_월 수급금액별.csv"
     return pd.read_csv(file_path, encoding='cp949')
 
 df = load_data()
