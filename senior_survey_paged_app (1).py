@@ -3,21 +3,13 @@ import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-import os
+from matplotlib import rc
+import stremalit as st
 
-# 현재 파일과 같은 위치의 폰트 경로 지정
-font_path = os.path.join(os.path.dirname(__file__), "NanumGothic-Regular.ttf")
-
-# 파일이 존재하는지 확인
-if not os.path.exists(font_path):
-    raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
-
-# 폰트 속성 설정
-fontprop = fm.FontProperties(fname=font_path)
-plt.rc('font', family=fontprop.get_name())
+rc('fomt', family ='AppleGothic')
 
 # 마이너스 폰트 깨짐 방지
-mpl.rcParams['axes.unicode_minus'] = False
+plt.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
 @st.cache_data
