@@ -3,40 +3,13 @@ import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 
-# 📌 한글 폰트 설정
-plt.rcParams['font.family'] = 'NanumGothic'
-plt.rcParams['axes.unicode_minus'] = False
+# ✅ 나눔고딕 등 한글 폰트가 있는 경우
+font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"  # 또는 다른 경로
+fontprop = fm.FontProperties(fname=font_path)
+plt.rc('font', family=fontprop.get_name())
 
-# ✅ HTML/CSS 스타일 삽입
-st.markdown("""
-<style>
-.big-title {
-    font-size: 64px;
-    font-weight: 900;
-    color: black;
-    margin-bottom: 0;
-}
-.sub-title {
-    font-size: 36px;
-    font-weight: 600;
-    color: black;
-    margin-top: 0;
-}
-.date-box {
-    text-align: right;
-    font-size: 14px;
-    margin-top: -40px;
-    color: #555;
-}
-.top-nav {
-    font-size: 14px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-    color: black;
-}
-</style>
-""", unsafe_allow_html=True)
+# ✅ 음수 깨짐 방지
+plt.rcParams['axes.unicode_minus'] = False
 
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
