@@ -3,14 +3,18 @@ import pandas as pd
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 
-# ✅ 나눔고딕 등 한글 폰트가 있는 경우
-font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"  # 또는 다른 경로
-fontprop = fm.FontProperties(fname=font_path)
-plt.rc('font', family=fontprop.get_name())
+# 여러 한글 폰트 후보 중 시스템에 설치된 것을 우선 적용
+font_candidates = ['NanumGothic', 'Malgun Gothic', 'AppleGothic', 'Arial']
+for font in font_candidates:
+    try:
+        mpl.rc('font', family=font)
+        print(f"✅ 한글 폰트 적용됨: {font}")
+        break
+    except:
+        continue
 
-# ✅ 음수 깨짐 방지
-plt.rcParams['axes.unicode_minus'] = False
-
+# 음수 깨짐 방지
+mpl.rcParams['axes.unicode_minus'] = False
 
 # 📌 데이터 로딩 (같은 폴더에 있어야 함)
 @st.cache_data
