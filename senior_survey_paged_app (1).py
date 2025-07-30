@@ -175,5 +175,3 @@ ax.set_ylabel("잔액 (만원)")
 ax.legend()
 ax.grid(True)
 st.pyplot(fig)
-
-이 코드 돌렸는데 streamlit 화면이 안 나와
