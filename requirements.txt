@@ -1,8 +1,4 @@
 streamlit
 pandas
-altair
-pydeck
-folium
-pillow
-matplotlib
-plotly
+joblib
+scikit-learn
