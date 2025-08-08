@@ -12,7 +12,7 @@ def load_models():
     type_model = joblib.load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
 
-survey_model, survey_encoder, reg_model, type_model = load_models()
+    survey_model, survey_encoder, reg_model, type_model = load_models()
 
 # 페이지 설정
 st.set_page_config(page_title="시니어 금융 설문", page_icon="💸", layout="centered")
