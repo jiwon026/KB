@@ -11,6 +11,8 @@ def load_models():
     reg_model = joblib.load("reg_model.pkl")
     type_model = joblib.load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
+    
+survey_model, survey_encoder, reg_model, type_model = load_models()
 
 # 연금 종류 분류 함수
 def classify_pension_type(amount):
