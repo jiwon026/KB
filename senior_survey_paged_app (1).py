@@ -8,11 +8,11 @@ import joblib
 def load_models():
     survey_model = joblib.load("tabnet_model.pkl")
     survey_encoder = joblib.load("label_encoder.pkl")
-    reg_model = joblib.load("reg_model.pkl")
-    type_model = joblib.load("type_model.pkl")
-    return survey_model, survey_encoder, reg_model, type_model
+    reg_model = joblib.load("reg_model.pkl")       # 연금 예측 회귀 모델
+    type_model = joblib.load("type_model.pkl")     # 연금 유형 분류 모델
+    return survey_model, encoder, reg_model, type_model
 
-survey_model, survey_encoder, reg_model, type_model = load_models()
+survey_model, encoder, reg_model, type_model = load_models()
 
 # 연금 종류 분류 함수
 def classify_pension_type(amount):
