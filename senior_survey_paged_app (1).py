@@ -4,7 +4,7 @@ import numpy as np
 import joblib
 
 # 모델 로딩 함수
-@st.cache_resource
+
 def load_models():
     survey_model = joblib.load("tabnet_model.pkl")
     survey_encoder = joblib.load("label_encoder.pkl")
