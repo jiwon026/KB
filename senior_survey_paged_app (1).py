@@ -1,32 +1,24 @@
 # app.py
 import os
-import pandas as pd
 import numpy as np
+import pandas as pd
+import streamlit as st
 import joblib
 import faiss
-import streamlit as st
-
-# === 경로 안전 설정 (Streamlit/로컬 모두 대응) ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
-
-# 모델/데이터가 같은 폴더라면 굳이 하위폴더 안 써도 됨
-MODELS_DIR = BASE_DIR
-DATA_DIR   = BASE_DIR
 
 # =================================
-# 🔹 모델 로딩 (캐시)
+# 기본 설정
 # =================================
+st.set_page_config(page_title="시니어 금융 설문 & 추천", page_icon="💸", layout="centered")
 
-import os, joblib, pandas as pd, streamlit as st
-import faiss
-
-# === 경로 안전 설정 (Streamlit/로컬 모두 대응) ===
+# 실행 파일 기준 경로 (Streamlit/로컬 모두 안전)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+MODELS_DIR = BASE_DIR          # 모델/인덱스/CSV 모두 같은 폴더라고 가정
+PRODUCTS_CSV = "금융상품_3개_통합본.csv"
 
-# 모델/데이터가 같은 폴더라면 굳이 하위폴더 안 써도 됨
-MODELS_DIR = BASE_DIR
-DATA_DIR   = BASE_DIR
-
+# =================================
+# 모델/데이터 로딩 (캐시)
+# =================================
 @st.cache_resource
 def load_models():
     survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
@@ -43,17 +35,22 @@ def load_faiss_index(optional=True):
     return faiss.read_index(idx_path)
 
 @st.cache_data
-def load_products():
-    csv_path = os.path.join(DATA_DIR, "금융상품_3개_통합본.csv")
-    return pd.read_csv(csv_path) if os.path.exists(csv_path) else None
+def load_products_fixed():
+    path = os.path.join(BASE_DIR, PRODUCTS_CSV)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"상품 파일이 없습니다: {path}")
+    try:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        df = pd.read_csv(path, encoding="cp949")
+    return df
 
-# ✅ 정확히 4개만 받기! (index/user_input은 따로 로드/생성)
 survey_model, survey_encoder, reg_model, type_model = load_models()
-index = load_faiss_index(optional=True)
-
+faiss_index_loaded = load_faiss_index(optional=True)  # 있으면 로드(없어도 무방)
+raw_products = load_products_fixed()
 
 # =================================
-# 🔧 상품 전처리 & 추천 유틸
+# 상품 전처리 & 추천 유틸
 # =================================
 def preprocess_products(df: pd.DataFrame) -> pd.DataFrame:
     np.random.seed(42)
@@ -69,12 +66,12 @@ def preprocess_products(df: pd.DataFrame) -> pd.DataFrame:
     else:
         names = [f"무명상품_{i}" for i in range(len(df))]
 
-    # 최소 투자금액(없으면 샘플값)
+    # 최소 투자금액
     if '최고한도' in df.columns:
         min_invest = pd.to_numeric(df['최고한도'], errors='coerce').fillna(0)
-        z = (min_invest == 0)
-        if z.any():
-            min_invest[z] = np.random.randint(100, 1000, z.sum())
+        zero_mask = (min_invest == 0)
+        if zero_mask.any():
+            min_invest[zero_mask] = np.random.randint(100, 1000, zero_mask.sum())
     else:
         min_invest = np.random.randint(100, 1000, len(df))
 
@@ -91,11 +88,11 @@ def preprocess_products(df: pd.DataFrame) -> pd.DataFrame:
         raw_risk = df['위험등급'].astype(str)
         risk = raw_risk.apply(lambda x: '높음' if ('5' in x or '4' in x) else ('중간' if '3' in x else '낮음'))
     else:
-        risk = np.random.choice(['낮음', '중간', '높음'], len(df))
+        risk = np.random.choice(['낮음','중간','높음'], len(df))
 
     # 권장기간/투자성향(필터용)
     duration = np.random.choice([6, 12, 24, 36], len(df))
-    profile = np.random.choice(['안정형', '위험중립형', '공격형'], len(df))
+    profile = np.random.choice(['안정형','위험중립형','공격형'], len(df))
 
     out = pd.DataFrame({
         '상품명': names,
@@ -108,6 +105,7 @@ def preprocess_products(df: pd.DataFrame) -> pd.DataFrame:
     return out[out['상품명'] != '무명상품'].drop_duplicates(subset=['상품명'])
 
 def rule_based_filter(df: pd.DataFrame, user: dict) -> pd.DataFrame:
+    # 사용자 리스크 허용도 기준 허용 리스크 정의
     risk_pref_map = {
         '안정형': ['낮음','중간'],
         '위험중립형': ['중간','낮음','높음'],
@@ -122,7 +120,7 @@ def rule_based_filter(df: pd.DataFrame, user: dict) -> pd.DataFrame:
         (df['투자성향'] == user['투자성향'])
     ]
     if filtered.empty:
-        # 너무 빡세면 성향만 완화
+        # 너무 타이트하면 성향만 완화
         filtered = df[
             (df['최소투자금액'] <= user['투자금액']) &
             (df['권장투자기간'] <= user['투자기간']) &
@@ -161,6 +159,9 @@ def recommend_products(processed_df: pd.DataFrame, user: dict, topk: int = 10):
 
     filtered = filtered.drop_duplicates(subset=['상품명'])
     X = _get_feature_vector(filtered)
+
+    # 기존 인덱스가 있으면 활용 가능하지만, 사용자 조건으로 필터링된 집합이 매번 달라져서
+    # 여기서는 각 요청마다 경량 IndexFlatL2를 새로 만드는 방식을 사용
     index = faiss.IndexFlatL2(X.shape[1])
     index.add(X)
 
@@ -171,40 +172,19 @@ def recommend_products(processed_df: pd.DataFrame, user: dict, topk: int = 10):
     results = pd.DataFrame([_explain_product(row, user) for _, row in rec.iterrows()])
     return results, index
 
-@st.cache_data
-def load_default_products():
-    path = os.path.join(DATA_DIR, "sample_products.csv")
-    if os.path.exists(path):
-        return preprocess_products(pd.read_csv(path))
-    return None
+processed_products = preprocess_products(raw_products)
 
 # =================================
-# 🖥 Streamlit UI
+# UI 흐름 관리
 # =================================
-st.set_page_config(page_title="시니어 금융 설문", page_icon="💸", layout="centered")
 st.title("💬 시니어 금융 설문 & 추천 시스템")
 
-# 상태 관리
 ss = st.session_state
-ss.setdefault("flow", "choose")          # choose → predict → survey → result → recommend
-ss.setdefault("pred_amount", None)       # 미수령자의 예측 연금액
-ss.setdefault("survey_answers", {})      # 설문 결과 캐시
-ss.setdefault("products", load_default_products())
+ss.setdefault("flow", "choose")      # choose → predict → survey → recommend
+ss.setdefault("pred_amount", None)   # 미수령자 예측 연금액
+ss.setdefault("answers", {})         # 설문 응답
 
-# 사이드바: 상품 CSV 업로드(옵션)
-st.sidebar.header("📦 상품 데이터")
-up = st.sidebar.file_uploader("CSV 업로드(없으면 data/sample_products.csv 사용)", type=["csv"])
-if up is not None:
-    ss.products = preprocess_products(pd.read_csv(up))
-    st.sidebar.success(f"상품 {len(ss.products):,}건 로드됨")
-elif ss.products is not None:
-    st.sidebar.info(f"기본 상품 {len(ss.products):,}건 사용 중")
-else:
-    st.sidebar.warning("상품 데이터가 없습니다. 업로드하거나 data/sample_products.csv를 넣어주세요.")
-
-# -------------------------------
-# 공통: 설문 함수
-# -------------------------------
+# 공통 설문 문항
 QUESTIONS = [
     ("나이를 입력해주세요.", "number", "age"),
     ("성별을 선택해주세요.", "select", "gender", ["남성", "여성"]),
@@ -240,9 +220,7 @@ def map_survey_to_model_input(r):
     ]])
     return arr
 
-# -------------------------------
-# 1) 연금 수령 여부 선택
-# -------------------------------
+# 1) 연금 수령 여부
 if ss.flow == "choose":
     st.markdown("### 1️⃣ 현재 연금을 받고 계신가요?")
     choice = st.radio("연금 수령 여부를 선택해주세요.", ["선택하세요", "예(수령 중)", "아니오(미수령)"], index=0)
@@ -251,9 +229,7 @@ if ss.flow == "choose":
     elif choice == "아니오(미수령)":
         ss.flow = "predict"
 
-# -------------------------------
 # 2-1) 미수령자 → 연금 계산기
-# -------------------------------
 if ss.flow == "predict":
     st.subheader("📈 연금 계산기")
     income = st.number_input("평균 월소득(만원)", min_value=0, step=1, key="pred_income")
@@ -282,16 +258,12 @@ if ss.flow == "predict":
         st.markdown(f"📂 예측 연금 유형: **{ptype}**")
         st.info(explains[ptype])
 
-        # 다음 단계: 설문
         ss.flow = "survey"
 
-# -------------------------------
-# 2) 수령자/미수령자 공통 → 설문
-# -------------------------------
+# 2) 수령자/미수령자 공통 → 설문 → 유형 분류
 if ss.flow == "survey":
     answers = render_survey()
     if st.button("유형 분류하기"):
-        # 설문 → TabNet 분류
         arr = map_survey_to_model_input(answers)
         pred = survey_model.predict(arr)
         label = survey_encoder.inverse_transform(pred)[0]
@@ -303,49 +275,41 @@ if ss.flow == "survey":
         st.success(f"🧾 예측된 금융 유형: **{label}** (확률 {predicted_proba*100:.1f}%)")
         st.bar_chart(proba_df.T)
 
-        # 다음 단계(추천)로 진행
-        ss.survey_answers = answers
+        ss.answers = answers
         ss.flow = "recommend"
 
-# -------------------------------
 # 3) 추천: 설문 + 투자조건 입력 → 추천
-# -------------------------------
 if ss.flow == "recommend":
     st.markdown("---")
     st.subheader("🧲 금융상품 추천")
 
-    if ss.products is None:
-        st.info("상품 CSV를 업로드하거나 data/sample_products.csv 를 넣어주세요.")
-    else:
-        # 추천 조건 입력
-        invest_amount = st.number_input("투자금액(만원)", min_value=10, step=10, value=500)
-        invest_period = st.selectbox("투자기간(개월)", [6, 12, 24, 36], index=1)
-        risk_choice   = st.selectbox("리스크 허용도", ["안정형", "위험중립형", "공격형"], index=1)
-        target_monthly = st.number_input("목표 월이자(만원)", min_value=1, step=1, value=10)
+    # 추천 조건 입력
+    invest_amount  = st.number_input("투자금액(만원)", min_value=10, step=10, value=500)
+    invest_period  = st.selectbox("투자기간(개월)", [6, 12, 24, 36], index=1)
+    risk_choice    = st.selectbox("리스크 허용도", ["안정형", "위험중립형", "공격형"], index=1)
+    target_monthly = st.number_input("목표 월이자(만원)", min_value=1, step=1, value=10)
 
-        if st.button("추천 보기"):
-            user_pref = {
-                '투자금액': invest_amount,
-                '투자기간': invest_period,
-                '투자성향': risk_choice,
-                '목표월이자': target_monthly
-            }
-            rec_df, faiss_index = recommend_products(ss.products, user_pref)
+    if st.button("추천 보기"):
+        user_pref = {
+            '투자금액': invest_amount,
+            '투자기간': invest_period,
+            '투자성향': risk_choice,
+            '목표월이자': target_monthly
+        }
+        rec_df, idx = recommend_products(processed_products, user_pref)
 
-            if "메시지" in rec_df.columns:
-                st.warning(rec_df.iloc[0, 0])
-            else:
-                st.dataframe(rec_df, use_container_width=True)
-                csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+        if "메시지" in rec_df.columns:
+            st.warning(rec_df.iloc[0, 0])
+        else:
+            st.dataframe(rec_df, use_container_width=True)
+            csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
 
-                # 인덱스 저장(옵션)
-                idx_path = os.path.join(MODELS_DIR, "faiss_index.idx")
-                faiss.write_index(faiss_index, idx_path)
-                st.caption(f"FAISS 인덱스 저장됨: models/faiss_index.idx")
+            # 원하면 인덱스 저장
+            faiss.write_index(idx, os.path.join(MODELS_DIR, "faiss_index.idx"))
+            st.caption("FAISS 인덱스가 저장되었습니다: faiss_index.idx")
 
-    # 흐름 리셋 버튼
     if st.button("처음으로 돌아가기"):
-        for k in ["flow","pred_amount","survey_answers"]:
-            if k in ss: del ss[k]
+        for k in ["flow", "pred_amount", "answers"]:
+            if k in st.session_state: del st.session_state[k]
         st.rerun()
