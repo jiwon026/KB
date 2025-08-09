@@ -17,7 +17,7 @@ products_df = pd.read_csv(csv_path)
 # =================================
 # 🔹 모델 로딩 (캐시)
 # =================================
-@st.cache_resource
+
 def load_models():
     survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
     survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
