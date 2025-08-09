@@ -6,28 +6,52 @@ import joblib
 import faiss
 import streamlit as st
 
-# =================================
-# 📂 경로 설정 (Git 리포 상대경로 안전하게)
-# =================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(BASE_DIR, "금융상품_3개_통합본.csv")
+# === 경로 안전 설정 (Streamlit/로컬 모두 대응) ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 
-products_df = pd.read_csv(csv_path)
+# 모델/데이터가 같은 폴더라면 굳이 하위폴더 안 써도 됨
+MODELS_DIR = BASE_DIR
+DATA_DIR   = BASE_DIR
 
 # =================================
 # 🔹 모델 로딩 (캐시)
 # =================================
 
+import os, joblib, pandas as pd, streamlit as st
+import faiss
+
+# === 경로 안전 설정 (Streamlit/로컬 모두 대응) ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+
+# 모델/데이터가 같은 폴더라면 굳이 하위폴더 안 써도 됨
+MODELS_DIR = BASE_DIR
+DATA_DIR   = BASE_DIR
+
+@st.cache_resource
 def load_models():
     survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
     survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
     reg_model      = joblib.load(os.path.join(MODELS_DIR, "reg_model.pkl"))
     type_model     = joblib.load(os.path.join(MODELS_DIR, "type_model.pkl"))
-    index = faiss.read_index(os.path.join(BASE_DIR, "faiss_index.idx"))
-    user_input = joblib.load("random_user.pkl")
-    return survey_model, survey_encoder, reg_model, type_model, index, user_input
+    return survey_model, survey_encoder, reg_model, type_model
 
-survey_model, survey_encoder, reg_model, type_model, index, user_input = load_models()
+@st.cache_resource
+def load_faiss_index(optional=True):
+    idx_path = os.path.join(MODELS_DIR, "faiss_index.idx")
+    if optional and not os.path.exists(idx_path):
+        return None
+    return faiss.read_index(idx_path)
+
+@st.cache_data
+def load_products():
+    csv_path = os.path.join(DATA_DIR, "금융상품_3개_통합본.csv")
+    return pd.read_csv(csv_path) if os.path.exists(csv_path) else None
+
+# ✅ 정확히 4개만 받기! (index/user_input은 따로 로드/생성)
+survey_model, survey_encoder, reg_model, type_model = load_models()
+index = load_faiss_index(optional=True)   # 있으면 로드, 없으면 None
+products_df = load_products()             # 있으면 로드, 없으면 None
+
 
 # =================================
 # 🔧 상품 전처리 & 추천 유틸
