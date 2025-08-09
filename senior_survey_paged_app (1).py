@@ -23,9 +23,11 @@ def load_models():
     survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
     reg_model      = joblib.load(os.path.join(MODELS_DIR, "reg_model.pkl"))
     type_model     = joblib.load(os.path.join(MODELS_DIR, "type_model.pkl"))
-    return survey_model, survey_encoder, reg_model, type_model
+    index = faiss.read_index(os.path.join(BASE_DIR, "faiss_index.idx"))
+    user_input = joblib.load("random_user.pkl")
+    return survey_model, survey_encoder, reg_model, type_model, index, user_input
 
-survey_model, survey_encoder, reg_model, type_model = load_models()
+survey_model, survey_encoder, reg_model, type_model, index, user_input = load_models()
 
 # =================================
 # 🔧 상품 전처리 & 추천 유틸
