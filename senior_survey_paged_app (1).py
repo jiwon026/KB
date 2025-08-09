@@ -10,8 +10,9 @@ import streamlit as st
 # 📂 경로 설정 (Git 리포 상대경로 안전하게)
 # =================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-DATA_DIR = os.path.join(BASE_DIR, "data")
+csv_path = os.path.join(BASE_DIR, "금융상품_3개_통합본.csv")
+
+products_df = pd.read_csv(csv_path)
 
 # =================================
 # 🔹 모델 로딩 (캐시)
