@@ -49,8 +49,7 @@ def load_products():
 
 # ✅ 정확히 4개만 받기! (index/user_input은 따로 로드/생성)
 survey_model, survey_encoder, reg_model, type_model = load_models()
-index = load_faiss_index(optional=True)   # 있으면 로드, 없으면 None
-products_df = load_products()             # 있으면 로드, 없으면 None
+index = load_faiss_index(optional=True)
 
 
 # =================================
