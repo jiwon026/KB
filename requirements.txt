@@ -3,3 +3,5 @@ pandas
 joblib
 scikit-learn
 pytorch-tabnet
+faiss-cpu
+numpy
