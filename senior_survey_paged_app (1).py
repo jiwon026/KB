@@ -172,7 +172,7 @@ def _explain_product(row: pd.Series, user: dict) -> dict:
         '예상수익률(연)': f"{round(float(row['예상수익률'])*100,2)}%"
     }
 
-def recommend_products(processed_df: pd.DataFrame, user: dict, topk: int = 10):
+def recommend_products(processed_df: pd.DataFrame, user: dict, topk: int = 3):
     filtered = rule_based_filter(processed_df, user)
     if filtered.empty:
         return pd.DataFrame({'메시지': ['조건에 맞는 상품이 없어요 😢']}), None
