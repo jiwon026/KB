@@ -76,12 +76,32 @@ def preprocess_products(df: pd.DataFrame) -> pd.DataFrame:
         min_invest = np.random.randint(100, 1000, len(df))
 
     # 수익률(%) → 소수
-    rate_col = '기본금리( %)' if '기본금리( %)' in df.columns else ('세전\n이자율' if '세전\n이자율' in df.columns else None)
-    if rate_col and rate_col in df.columns:
-        est_return = pd.to_numeric(df[rate_col].astype(str).str.extract(r"([\d.]+)")[0], errors='coerce')
-        est_return = est_return.fillna(np.random.uniform(1.0, 8.0, len(df))) / 100.0
+    cand_cols = [c for c in df.columns if any(k in c for k in ["기본금리", "이자율", "세전"])]
+    rate_col = cand_cols[0] if cand_cols else None
+
+    if rate_col:
+        # 2) 숫자 추출 → float
+        #    예: "3.2% (세전)" 같은 문자열에서 3.2만 뽑아냄
+        raw = (df[rate_col].astype(str)
+                          .str.replace(",", "", regex=False)
+                          .str.extract(r"([\d\.]+)")[0])
+        est_return = pd.to_numeric(raw, errors="coerce")
+
+        # 3) NaN을 난수(1~8%)로 채우되, 반드시 인덱스를 맞춘 Series 사용
+        rand_series = pd.Series(
+            np.random.uniform(1.0, 8.0, len(df)),
+            index=df.index
+        )
+        est_return = est_return.fillna(rand_series)
+
+        # 4) % → 소수
+        est_return = (est_return / 100.0).astype(float).round(4)
     else:
-        est_return = np.round(np.random.uniform(0.01, 0.08, len(df)), 4)
+        # 수익률 컬럼이 전혀 없으면 1~8% 난수 부여(소수)
+        est_return = pd.Series(
+            np.round(np.random.uniform(0.01, 0.08, len(df)), 4),
+            index=df.index
+        )
 
     # 리스크
     if '위험등급' in df.columns:
