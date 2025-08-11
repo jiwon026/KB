@@ -69,6 +69,42 @@ PRODUCTS_CSV = "금융상품_3개_통합본.csv"  # 즉시 구축(폴백)용 원
 # 모델/데이터 로딩 (캐시)
 # =================================
 @st.cache_resource
+def load_models_safe():
+    show_env()
+    mdir = MODELS_DIR
+    survey_model   = safe_joblib_load(os.path.join(mdir, "tabnet_model.pkl"), "survey_model")
+    survey_encoder = safe_joblib_load(os.path.join(mdir, "label_encoder.pkl"), "label_encoder")
+    reg_model      = safe_joblib_load(os.path.join(mdir, "reg_model.pkl"), "reg_model")
+    type_model     = safe_joblib_load(os.path.join(mdir, "type_model.pkl"), "type_model")
+    return survey_model, survey_encoder, reg_model, type_model
+
+@st.cache_resource
+def load_saved_reco_assets_safe():
+    mdir = MODELS_DIR
+    st.sidebar.header("📦 저장된 추천 자산(파일 존재 여부)")
+    file_exists(os.path.join(mdir, "deposit_index.faiss"))
+    file_exists(os.path.join(mdir, "deposit_metadata.parquet"))
+    file_exists(os.path.join(mdir, "fund_index.faiss"))
+    file_exists(os.path.join(mdir, "fund_metadata.parquet"))
+
+    assets = {
+        "deposit_index": safe_faiss_read(os.path.join(mdir, "deposit_index.faiss"), "예·적금"),
+        "deposit_meta":  None,
+        "fund_index":    safe_faiss_read(os.path.join(mdir, "fund_index.faiss"), "펀드"),
+        "fund_meta":     None,
+    }
+    # 메타데이터
+    try:
+        assets["deposit_meta"] = pd.read_parquet(os.path.join(mdir, "deposit_metadata.parquet"))
+        st.sidebar.success("✅ deposit_metadata.parquet 로드")
+    except Exception as e:
+        st.sidebar.error("❌ deposit_metadata.parquet 로드 실패"); st.sidebar.exception(e)
+    try:
+        assets["fund_meta"] = pd.read_parquet(os.path.join(mdir, "fund_metadata.parquet"))
+        st.sidebar.success("✅ fund_metadata.parquet 로드")
+    except Exception as e:
+        st.sidebar.error("❌ fund_metadata.parquet 로드 실패"); st.sidebar.exception(e)
+    return assets
 def load_models():
     survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
     survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
