@@ -1,4 +1,52 @@
 # app.py
+# === 진단/안전 로더 유틸 (app.py 상단 import 아래) ===
+import platform, sys
+
+def safe_joblib_load(path, name):
+    try:
+        obj = joblib.load(path)
+        st.sidebar.success(f"✅ {name} 로드: {os.path.basename(path)}")
+        return obj
+    except Exception as e:
+        st.sidebar.error(f"❌ {name} 로드 실패: {os.path.basename(path)}")
+        st.sidebar.exception(e)
+        return None
+
+def safe_faiss_read(path, name):
+    try:
+        import faiss  # 설치 실패시 ImportError
+        idx = faiss.read_index(path)
+        st.sidebar.success(f"✅ {name} 인덱스 로드: {os.path.basename(path)}")
+        return idx
+    except Exception as e:
+        st.sidebar.error(f"❌ {name} 인덱스 로드 실패: {os.path.basename(path)}")
+        st.sidebar.exception(e)
+        return None
+
+def file_exists(path):
+    ok = os.path.exists(path)
+    st.sidebar.write(("🟢" if ok else "🔴"), path)
+    return ok
+
+def show_env():
+    st.sidebar.header("🧪 환경/버전")
+    st.sidebar.write("Python:", sys.version.split()[0])
+    st.sidebar.write("Platform:", platform.platform())
+    try:
+        import numpy as np; st.sidebar.write("numpy:", np.__version__)
+    except: pass
+    try:
+        import pandas as pd; st.sidebar.write("pandas:", pd.__version__)
+    except: pass
+    try:
+        import faiss; st.sidebar.write("faiss:", faiss.__version__)
+    except Exception as e:
+        st.sidebar.warning("faiss 불가"); st.sidebar.write(str(e))
+    try:
+        import torch; st.sidebar.write("torch:", torch.__version__)
+    except: pass
+
+
 import os
 import re
 import numpy as np
