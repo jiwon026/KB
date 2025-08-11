@@ -1,10 +1,7 @@
 streamlit
 pandas
 numpy
-pyarrow
-scikit-learn
 joblib
 faiss
-torch
-pytorch
-protobuf
+os
+re
