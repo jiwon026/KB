@@ -7,6 +7,9 @@ import streamlit as st
 import joblib
 import faiss
 
+st.set_option('client.showErrorDetails', True)
+st.write("BASE_DIR:", BASE_DIR)  # 경로 확인용(원하면 주석)
+
 # =================================
 # 기본 설정
 # =================================
