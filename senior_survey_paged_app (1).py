@@ -7,74 +7,99 @@ import streamlit as st
 import joblib
 import faiss
 
-st.set_option('client.showErrorDetails', True)
-st.write("BASE_DIR:", BASE_DIR)  # 경로 확인용(원하면 주석)
-
 # =================================
 # 기본 설정
 # =================================
 st.set_page_config(page_title="시니어 금융 설문 & 추천", page_icon="💸", layout="centered")
-
-# 실행 파일 기준 경로
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 MODELS_DIR = BASE_DIR
 DEPOSIT_CSV = "금융상품_3개_통합본.csv"  # 예·적금 통합 CSV
 FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 
+# 에러 세부 표시 & 경로 확인용 출력(문제 해결이 끝나면 주석 처리 가능)
+st.set_option('client.showErrorDetails', True)
+st.write("BASE_DIR:", BASE_DIR)
+
 # =================================
 # 모델/데이터 로딩 (캐시)
 # =================================
-#@st.cache_resource
+@st.cache_resource
 def load_models():
-    survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
-    survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
-    reg_model      = joblib.load(os.path.join(MODELS_DIR, "reg_model.pkl"))
-    type_model     = joblib.load(os.path.join(MODELS_DIR, "type_model.pkl"))
+    """모델 파일이 없어도 앱이 죽지 않도록 안전 로딩"""
+    def safe_load(name):
+        path = os.path.join(MODELS_DIR, name)
+        if not os.path.exists(path):
+            st.warning(f"모델 파일 없음: {name} (이 단계는 건너뜁니다)")
+            return None
+        try:
+            return joblib.load(path)
+        except Exception as e:
+            st.error(f"{name} 로드 실패: {e}")
+            return None
+
+    survey_model   = safe_load("tabnet_model.pkl")
+    survey_encoder = safe_load("label_encoder.pkl")
+    reg_model      = safe_load("reg_model.pkl")
+    type_model     = safe_load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
 
-#@st.cache_resource
+@st.cache_resource
 def load_saved_reco_assets():
     """저장된 추천 자산(FAISS 인덱스 + 메타데이터) 로딩"""
-    assets = {
-        "deposit_index": None, "deposit_meta": None,
-        "fund_index": None,    "fund_meta": None
-    }
-    dep_idx_path  = os.path.join(MODELS_DIR, "deposit_index.faiss")
-    dep_meta_path = os.path.join(MODELS_DIR, "deposit_metadata.parquet")
-    fund_idx_path  = os.path.join(MODELS_DIR, "fund_index.faiss")
-    fund_meta_path = os.path.join(MODELS_DIR, "fund_metadata.parquet")
+    assets = {"deposit_index": None, "deposit_meta": None,
+              "fund_index": None,    "fund_meta": None}
 
-    if os.path.exists(dep_idx_path) and os.path.exists(dep_meta_path):
-        assets["deposit_index"] = faiss.read_index(dep_idx_path)
-        assets["deposit_meta"]  = pd.read_parquet(dep_meta_path)
-    if os.path.exists(fund_idx_path) and os.path.exists(fund_meta_path):
-        assets["fund_index"] = faiss.read_index(fund_idx_path)
-        assets["fund_meta"]  = pd.read_parquet(fund_meta_path)
+    def read_parquet_safe(p):
+        if not os.path.exists(p): return None
+        try:
+            return pd.read_parquet(p)  # pyarrow/fastparquet 필요
+        except Exception:
+            # csv 백업 파일 있으면 대체
+            csv_fallback = os.path.splitext(p)[0] + ".csv"
+            if os.path.exists(csv_fallback):
+                st.info(f"{os.path.basename(p)} 대신 {os.path.basename(csv_fallback)} 사용")
+                return pd.read_csv(csv_fallback)
+            raise
+
+    dep_idx  = os.path.join(MODELS_DIR, "deposit_index.faiss")
+    dep_meta = os.path.join(MODELS_DIR, "deposit_metadata.parquet")
+    fund_idx = os.path.join(MODELS_DIR, "fund_index.faiss")
+    fund_meta= os.path.join(MODELS_DIR, "fund_metadata.parquet")
+
+    if os.path.exists(dep_idx) and os.path.exists(dep_meta):
+        try:
+            assets["deposit_index"] = faiss.read_index(dep_idx)
+            assets["deposit_meta"]  = read_parquet_safe(dep_meta)
+        except Exception as e:
+            st.error(f"예·적금 인덱스/메타 로드 실패: {e}")
+
+    if os.path.exists(fund_idx) and os.path.exists(fund_meta):
+        try:
+            assets["fund_index"] = faiss.read_index(fund_idx)
+            assets["fund_meta"]  = read_parquet_safe(fund_meta)
+        except Exception as e:
+            st.error(f"펀드 인덱스/메타 로드 실패: {e}")
+
     return assets
 
-#@st.cache_data
+@st.cache_data
 def load_deposit_csv():
     path = os.path.join(BASE_DIR, DEPOSIT_CSV)
     if not os.path.exists(path):
         raise FileNotFoundError(f"예·적금 파일이 없습니다: {path}")
-    for enc in ["utf-8-sig", "cp949"]:
-        try:
-            return pd.read_csv(path, encoding=enc)
-        except UnicodeDecodeError:
-            continue
-    # 최후 fallback
+    for enc in ("utf-8-sig", "cp949"):
+        try: return pd.read_csv(path, encoding=enc)
+        except UnicodeDecodeError: pass
     return pd.read_csv(path)
 
-#@st.cache_data
+@st.cache_data
 def load_fund_csv():
     path = os.path.join(BASE_DIR, FUND_CSV)
     if not os.path.exists(path):
         raise FileNotFoundError(f"펀드 파일이 없습니다: {path}")
-    for enc in ["utf-8-sig", "cp949"]:
-        try:
-            return pd.read_csv(path, encoding=enc)
-        except UnicodeDecodeError:
-            continue
+    for enc in ("utf-8-sig", "cp949"):
+        try: return pd.read_csv(path, encoding=enc)
+        except UnicodeDecodeError: pass
     return pd.read_csv(path)
 
 survey_model, survey_encoder, reg_model, type_model = load_models()
@@ -124,7 +149,7 @@ def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
         rand_series = pd.Series(np.random.uniform(1.0, 8.0, len(df)), index=df.index)
         est_return = (est_return.fillna(rand_series) / 100.0).astype(float).round(4)
     else:
-        # 펀드는 조금 더 넓은 범위로 줄 수도 있음(0.03~0.15)
+        # 펀드는 좀 더 넓은 범위 (0.03~0.15)
         low, high = (0.01, 0.08) if group_name != "펀드" else (0.03, 0.15)
         est_return = pd.Series(np.round(np.random.uniform(low, high, len(df)), 4), index=df.index)
 
@@ -133,7 +158,6 @@ def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
         raw_risk = df['위험등급'].astype(str)
         risk = raw_risk.apply(lambda x: '높음' if ('5' in x or '4' in x) else ('중간' if '3' in x else '낮음'))
     else:
-        # 펀드는 분산 조금 공격적
         if group_name == "펀드":
             risk = pd.Series(np.random.choice(['낮음','중간','높음'], len(df), p=[0.2,0.4,0.4]), index=df.index)
         else:
@@ -201,6 +225,7 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     return out[cols]
 
 def recommend_with_saved_index(index, meta_df: pd.DataFrame, user: dict, topk: int):
+    """저장된 인덱스/메타데이터 사용 추천. 메타데이터 행 순서=add 순서 가정."""
     filtered = rule_based_filter(meta_df, user)
     if filtered.empty:
         return pd.DataFrame({'메시지': ['조건에 맞는 상품이 없어요 😢']})
@@ -237,7 +262,7 @@ def recommend_products_fallback_split(deposit_raw: pd.DataFrame, fund_raw: pd.Da
         _, idd = idxd.search(_get_user_vector(user), min(2, len(dep_f)))
         rec_dep = dep_f.iloc[idd[0]].copy().head(2)
     else:
-        rec_dep = pd.DataFrame(columns=dep_f.columns)  # 빈 DF
+        rec_dep = pd.DataFrame(columns=dep_f.columns)
 
     # 펀드 1개
     if not fun_f.empty:
@@ -315,46 +340,61 @@ if ss.flow == "predict":
     years  = st.number_input("국민연금 가입기간(년)", min_value=0, max_value=50, step=1, key="pred_years")
 
     if st.button("연금 예측하기"):
-        X = pd.DataFrame([{"평균월소득(만원)": income, "가입기간(년)": years}])
-        amount = round(float(reg_model.predict(X)[0]), 1)
-        ss.pred_amount = amount
+        if reg_model is None:
+            st.warning("연금 예측 모델이 없어 계산을 건너뜁니다.")
+        else:
+            try:
+                X = pd.DataFrame([{"평균월소득(만원)": income, "가입기간(년)": years}])
+                amount = round(float(reg_model.predict(X)[0]), 1)
+                ss.pred_amount = amount
 
-        def classify_pension_type(a):
-            if a >= 90: return "완전노령연금"
-            if a >= 60: return "조기노령연금"
-            if a >= 30: return "감액노령연금"
-            return "특례노령연금"
+                def classify_pension_type(a):
+                    if a >= 90: return "완전노령연금"
+                    if a >= 60: return "조기노령연금"
+                    if a >= 30: return "감액노령연금"
+                    return "특례노령연금"
 
-        ptype = classify_pension_type(amount)
-        explains = {
-            "조기노령연금": "※ 만 60세부터 수령 가능하나 최대 30% 감액될 수 있어요.",
-            "완전노령연금": "※ 만 65세부터 감액 없이 정액 수령이 가능해요.",
-            "감액노령연금": "※ 일정 조건을 만족하지 못할 경우 감액되어 수령됩니다.",
-            "특례노령연금": "※ 가입기간이 짧더라도 일정 기준 충족 시 수령 가능."
-        }
-        st.success(f"💰 예측 연금 수령액: **{amount}만원/월**")
-        st.markdown(f"📂 예측 연금 유형: **{ptype}**")
-        st.info(explains[ptype])
-
+                ptype = classify_pension_type(amount)
+                explains = {
+                    "조기노령연금": "※ 만 60세부터 수령 가능하나 최대 30% 감액될 수 있어요.",
+                    "완전노령연금": "※ 만 65세부터 감액 없이 정액 수령이 가능해요.",
+                    "감액노령연금": "※ 일정 조건을 만족하지 못할 경우 감액되어 수령됩니다.",
+                    "특례노령연금": "※ 가입기간이 짧더라도 일정 기준 충족 시 수령 가능."
+                }
+                st.success(f"💰 예측 연금 수령액: **{amount}만원/월**")
+                st.markdown(f"📂 예측 연금 유형: **{ptype}**")
+                st.info(explains[ptype])
+            except Exception as e:
+                st.exception(e)
         ss.flow = "survey"
 
 # 2) 수령자/미수령자 공통 → 설문 → 유형 분류
 if ss.flow == "survey":
     answers = render_survey()
     if st.button("유형 분류하기"):
-        arr = map_survey_to_model_input(answers)
-        pred = survey_model.predict(arr)
-        label = survey_encoder.inverse_transform(pred)[0]
+        if (survey_model is None) or (survey_encoder is None):
+            st.info("분류 모델이 없어 설문 결과를 저장만 하고 넘어갈게요.")
+            ss.answers = answers
+            ss.flow = "recommend"
+        else:
+            try:
+                arr = map_survey_to_model_input(answers)
+                pred = survey_model.predict(arr)
+                label = survey_encoder.inverse_transform(pred)[0]
 
-        proba = survey_model.predict_proba(arr)
-        proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
-        predicted_proba = float(proba_df[label].values[0])
-
-        st.success(f"🧾 예측된 금융 유형: **{label}** (확률 {predicted_proba*100:.1f}%)")
-        st.bar_chart(proba_df.T)
-
-        ss.answers = answers
-        ss.flow = "recommend"
+                proba_method = getattr(survey_model, "predict_proba", None)
+                if callable(proba_method):
+                    proba = proba_method(arr)
+                    proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
+                    st.bar_chart(proba_df.T)
+                    predicted_proba = float(proba_df[label].values[0])
+                    st.success(f"🧾 예측된 금융 유형: **{label}** (확률 {predicted_proba*100:.1f}%)")
+                else:
+                    st.success(f"🧾 예측된 금융 유형: **{label}**")
+            except Exception as e:
+                st.exception(e)
+            ss.answers = answers
+            ss.flow = "recommend"
 
 # 3) 추천: 설문 + 투자조건 입력 → 추천
 if ss.flow == "recommend":
@@ -383,8 +423,12 @@ if ss.flow == "recommend":
 
         if use_saved:
             # ✅ 저장된 인덱스/메타데이터 사용: 예·적금 2 + 펀드 1
-            rec_dep  = recommend_with_saved_index(dep_idx,  dep_meta,  user_pref, topk=2)
-            rec_fund = recommend_with_saved_index(fund_idx, fund_meta, user_pref, topk=1)
+            try:
+                rec_dep  = recommend_with_saved_index(dep_idx,  dep_meta,  user_pref, topk=2)
+                rec_fund = recommend_with_saved_index(fund_idx, fund_meta, user_pref, topk=1)
+            except Exception as e:
+                st.exception(e)
+                st.stop()
 
             if "메시지" in rec_dep.columns and "메시지" in rec_fund.columns:
                 st.warning("조건에 맞는 상품이 없어요 😢")
@@ -402,16 +446,17 @@ if ss.flow == "recommend":
             try:
                 deposit_raw = load_deposit_csv()
                 fund_raw    = load_fund_csv()
-            except FileNotFoundError as e:
-                st.error(str(e))
-            else:
                 rec_df = recommend_products_fallback_split(deposit_raw, fund_raw, user_pref)
-                if "메시지" in rec_df.columns:
-                    st.warning(rec_df.iloc[0, 0])
-                else:
-                    st.dataframe(rec_df, use_container_width=True)
-                    csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
-                    st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+            except Exception as e:
+                st.exception(e)
+                st.stop()
+
+            if "메시지" in rec_df.columns:
+                st.warning(rec_df.iloc[0, 0])
+            else:
+                st.dataframe(rec_df, use_container_width=True)
+                csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
 
     if st.button("처음으로 돌아가기"):
         for k in ["flow", "pred_amount", "answers"]:
