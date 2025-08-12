@@ -20,6 +20,9 @@ FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 st.set_option('client.showErrorDetails', True)
 st.write("BASE_DIR:", BASE_DIR)
 
+LOCK_INFERRED_FIELDS = False   # True로 바꾸면 자동 채운 소득/연금값을 수정 못하게 잠금
+
+
 # =================================
 # 모델/데이터 로딩 (캐시)
 # =================================
@@ -299,15 +302,36 @@ QUESTIONS = [
         ["안정형", "안정추구형", "위험중립형", "적극투자형", "공격투자형"]),
 ]
 
-def render_survey():
+def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
+    """
+    defaults: {"income": 123, "pension": 45.6} 같이 사전으로 기본값 전달
+    lock_inferred: True면 defaults로 채운 항목을 disabled 처리
+    """
     st.subheader("📝 설문")
     answers = {}
+    defaults = defaults or {}
+
+    def _seed_default(key, value):
+        skey = f"q_{key}"
+        if (skey not in st.session_state) and (value is not None):
+            st.session_state[skey] = value
+
+    # 필요한 곳에 기본값 심기
+    _seed_default("income",  defaults.get("income"))
+    _seed_default("pension", defaults.get("pension"))
+
     for q in QUESTIONS:
         title, kind, key = q[0], q[1], q[2]
+        disabled = lock_inferred and (key in defaults)
+
         if kind == "number":
-            answers[key] = st.number_input(title, min_value=0, step=1, key=f"q_{key}")
+            answers[key] = st.number_input(
+                title, min_value=0, step=1, key=f"q_{key}", disabled=disabled
+            )
         elif kind == "select":
-            answers[key] = st.selectbox(title, q[3], key=f"q_{key}")
+            answers[key] = st.selectbox(
+                title, q[3], key=f"q_{key}", disabled=disabled
+            )
     return answers
 
 def map_survey_to_model_input(r):
@@ -345,6 +369,13 @@ if ss.flow == "predict":
                 X = pd.DataFrame([{"평균월소득(만원)": income, "가입기간(년)": years}])
                 amount = round(float(reg_model.predict(X)[0]), 1)
                 ss.pred_amount = amount
+        
+                # 🔽 설문 기본값으로 쓸 프리필 저장
+                ss.prefill_survey = {
+                    "income": income,   # 방금 입력한 평균 월소득
+                    "pension": amount,  # 방금 예측된 월 연금액
+                }
+                
 
                 def classify_pension_type(a):
                     if a >= 90: return "완전노령연금"
@@ -368,7 +399,8 @@ if ss.flow == "predict":
 
 # 2) 수령자/미수령자 공통 → 설문 → 유형 분류
 if ss.flow == "survey":
-    answers = render_survey()
+    prefill = ss.get("prefill_survey", {})
+    answers = render_survey(defaults=prefill, lock_inferred=LOCK_INFERRED_FIELDS)
     if st.button("유형 분류하기"):
         if (survey_model is None) or (survey_encoder is None):
             st.info("분류 모델이 없어 설문 결과를 저장만 하고 넘어갈게요.")
