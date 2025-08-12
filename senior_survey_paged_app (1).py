@@ -1,6 +1,6 @@
 # app.py
 # --- 맨 위 import들 근처에 교체 ---
-import re, numpy as np, pandas as pd, streamlit as st, joblib
+import os, re, numpy as np, pandas as pd, streamlit as st, joblib
 
 # FAISS가 없으면 sklearn으로 대체
 USE_FAISS = True
