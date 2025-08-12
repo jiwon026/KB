@@ -1,87 +1,73 @@
 # app.py
 import os
-import re
 import numpy as np
 import pandas as pd
 import streamlit as st
 import joblib
-import faiss
+
+# (FAISS 있으면 사용, 없으면 sklearn으로 대체)
+USE_FAISS = True
+try:
+    import faiss  # pip: faiss-cpu
+except Exception as e:
+    USE_FAISS = False
+    from sklearn.neighbors import NearestNeighbors
 
 # =================================
 # 기본 설정
 # =================================
 st.set_page_config(page_title="시니어 금융 설문 & 추천", page_icon="💸", layout="centered")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 MODELS_DIR = BASE_DIR
-DEPOSIT_CSV = "금융상품_3개_통합본.csv"  # 예·적금 통합 CSV
+DEPOSIT_CSV = "금융상품_3개_통합본.csv"  # 예·적금 CSV
 FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 
-# 에러 세부 표시 & 경로 확인용 출력(문제 해결이 끝나면 주석 처리 가능)
-st.set_option('client.showErrorDetails', True)
-st.write("BASE_DIR:", BASE_DIR)
+# 예측→설문 프리필 값을 사용자가 수정 못 하게 잠글지 여부
+LOCK_INFERRED_FIELDS = False  # True면 자동 채운 소득/연금 칸 비활성화
 
-LOCK_INFERRED_FIELDS = False   # True로 바꾸면 자동 채운 소득/연금값을 수정 못하게 잠금
+# =================================
+# 공통 유틸 (인덱스 빌드/검색)
+# =================================
+def build_index(X: np.ndarray):
+    X = X.astype("float32")
+    if USE_FAISS:
+        index = faiss.IndexFlatL2(X.shape[1])
+        index.add(X)
+        return index
+    nn = NearestNeighbors(metric="euclidean")
+    nn.fit(X)
+    return nn
 
+def index_search(index, q: np.ndarray, k: int):
+    q = q.astype("float32")
+    if USE_FAISS:
+        return index.search(q, k)
+    D, I = index.kneighbors(q, n_neighbors=k, return_distance=True)
+    return D, I
 
 # =================================
 # 모델/데이터 로딩 (캐시)
 # =================================
 @st.cache_resource
 def load_models():
+    """모델 파일이 없어도 앱이 죽지 않게 안전 로딩"""
     def safe_load(name):
         path = os.path.join(MODELS_DIR, name)
         if not os.path.exists(path):
-            st.info(f"모델 파일 없음: {name} → 건너뜀"); return None
+            st.info(f"모델 파일 없음: {name} → 건너뜀")
+            return None
         try:
             return joblib.load(path)
         except Exception as e:
             st.warning(f"{name} 로드 실패: {e.__class__.__name__}: {e}")
             return None
+
     survey_model   = safe_load("tabnet_model.pkl")
     survey_encoder = safe_load("label_encoder.pkl")
     reg_model      = safe_load("reg_model.pkl")
     type_model     = safe_load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
-
-
-@st.cache_resource
-def load_saved_reco_assets():
-    """저장된 추천 자산(FAISS 인덱스 + 메타데이터) 로딩"""
-    assets = {"deposit_index": None, "deposit_meta": None,
-              "fund_index": None,    "fund_meta": None}
-
-    def read_parquet_safe(p):
-        if not os.path.exists(p): return None
-        try:
-            return pd.read_parquet(p)  # pyarrow/fastparquet 필요
-        except Exception:
-            # csv 백업 파일 있으면 대체
-            csv_fallback = os.path.splitext(p)[0] + ".csv"
-            if os.path.exists(csv_fallback):
-                st.info(f"{os.path.basename(p)} 대신 {os.path.basename(csv_fallback)} 사용")
-                return pd.read_csv(csv_fallback)
-            raise
-
-    dep_idx  = os.path.join(MODELS_DIR, "deposit_index.faiss")
-    dep_meta = os.path.join(MODELS_DIR, "deposit_metadata.parquet")
-    fund_idx = os.path.join(MODELS_DIR, "fund_index.faiss")
-    fund_meta= os.path.join(MODELS_DIR, "fund_metadata.parquet")
-
-    if os.path.exists(dep_idx) and os.path.exists(dep_meta):
-        try:
-            assets["deposit_index"] = faiss.read_index(dep_idx)
-            assets["deposit_meta"]  = read_parquet_safe(dep_meta)
-        except Exception as e:
-            st.error(f"예·적금 인덱스/메타 로드 실패: {e}")
-
-    if os.path.exists(fund_idx) and os.path.exists(fund_meta):
-        try:
-            assets["fund_index"] = faiss.read_index(fund_idx)
-            assets["fund_meta"]  = read_parquet_safe(fund_meta)
-        except Exception as e:
-            st.error(f"펀드 인덱스/메타 로드 실패: {e}")
-
-    return assets
 
 @st.cache_data
 def load_deposit_csv():
@@ -104,13 +90,12 @@ def load_fund_csv():
     return pd.read_csv(path)
 
 survey_model, survey_encoder, reg_model, type_model = load_models()
-saved_assets = load_saved_reco_assets()
 
 # =================================
-# 전처리 및 추천 유틸
+# 전처리 & 추천 유틸
 # =================================
 def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
-    """CSV → 공통 전처리. group_name으로 '예·적금'/'펀드' 라벨 부여 가능."""
+    """CSV → 공통 전처리. group_name='예·적금' 또는 '펀드' 라벨."""
     np.random.seed(42)
     df = df.copy()
     df.columns = df.columns.str.strip()
@@ -150,11 +135,10 @@ def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
         rand_series = pd.Series(np.random.uniform(1.0, 8.0, len(df)), index=df.index)
         est_return = (est_return.fillna(rand_series) / 100.0).astype(float).round(4)
     else:
-        # 펀드는 좀 더 넓은 범위 (0.03~0.15)
         low, high = (0.01, 0.08) if group_name != "펀드" else (0.03, 0.15)
         est_return = pd.Series(np.round(np.random.uniform(low, high, len(df)), 4), index=df.index)
 
-    # 리스크(낮음/중간/높음)
+    # 리스크
     if '위험등급' in df.columns:
         raw_risk = df['위험등급'].astype(str)
         risk = raw_risk.apply(lambda x: '높음' if ('5' in x or '4' in x) else ('중간' if '3' in x else '낮음'))
@@ -164,9 +148,9 @@ def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
         else:
             risk = pd.Series(np.random.choice(['낮음','중간','높음'], len(df), p=[0.6,0.3,0.1]), index=df.index)
 
-    # 권장기간/투자성향
+    # 권장기간/투자성향(필터용)
     duration = pd.Series(np.random.choice([6, 12, 24, 36], len(df)), index=df.index)
-    profile = pd.Series(np.random.choice(['안정형','위험중립형','공격형'], len(df)), index=df.index)
+    profile  = pd.Series(np.random.choice(['안정형','위험중립형','공격형'], len(df)), index=df.index)
 
     out = pd.DataFrame({
         '구분': group_name if group_name else '기타',
@@ -185,21 +169,13 @@ def rule_based_filter(df: pd.DataFrame, user: dict) -> pd.DataFrame:
         '위험중립형': ['중간','낮음','높음'],
         '공격형': ['높음','중간']
     }
-    allowed_risks = risk_pref_map.get(user['투자성향'], ['낮음','중간','높음'])
-
-    filtered = df[
+    allowed = risk_pref_map.get(user['투자성향'], ['낮음','중간','높음'])
+    f = df[
         (df['최소투자금액'] <= user['투자금액']) &
         (df['권장투자기간'] <= user['투자기간']) &
-        (df['리스크'].isin(allowed_risks)) &
-        (df['투자성향'] == user['투자성향'])
+        (df['리스크'].isin(allowed))
     ]
-    if filtered.empty:
-        filtered = df[
-            (df['최소투자금액'] <= user['투자금액']) &
-            (df['권장투자기간'] <= user['투자기간']) &
-            (df['리스크'].isin(allowed_risks))
-        ]
-    return filtered.sort_values('예상수익률', ascending=False).head(500).reset_index(drop=True)
+    return f.sort_values('예상수익률', ascending=False).head(500).reset_index(drop=True)
 
 def _get_feature_vector(df: pd.DataFrame) -> np.ndarray:
     return np.vstack([
@@ -221,34 +197,15 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     out['투자기간(개월)'] = out['권장투자기간'].astype(int)
     out['예상수익률(연)'] = (out['예상수익률'] * 100).round(2).astype(str) + '%'
     cols = ['구분','상품명','월예상수익금(만원)','예상수익률(연)','리스크','투자기간(개월)']
-    if '구분' not in out.columns:
-        out['구분'] = '기타'
     return out[cols]
 
-def recommend_with_saved_index(index, meta_df: pd.DataFrame, user: dict, topk: int):
-    """저장된 인덱스/메타데이터 사용 추천. 메타데이터 행 순서=add 순서 가정."""
-    filtered = rule_based_filter(meta_df, user)
-    if filtered.empty:
-        return pd.DataFrame({'메시지': ['조건에 맞는 상품이 없어요 😢']})
+def recommend_fallback_split(user: dict) -> pd.DataFrame:
+    """CSV 두 개(예·적금/펀드)로 즉시 구축: 예·적금 2 + 펀드 1"""
+    dep_raw = load_deposit_csv()
+    fun_raw = load_fund_csv()
 
-    allowed_ids = set(filtered.index.tolist())
-    q = _get_user_vector(user)
-    k_search = min(max(topk * 20, 100), len(meta_df))
-    D, I = index.search(q, k_search)
-    picked_ids = [int(i) for i in I[0] if int(i) in allowed_ids]
-
-    if not picked_ids:
-        rec = filtered.head(topk).copy()
-    else:
-        rec = meta_df.iloc[picked_ids].copy().loc[picked_ids].head(topk)
-
-    rec = rec.drop_duplicates(subset=['상품명']).head(topk)
-    return _add_explain(rec, user).reset_index(drop=True)
-
-# ---- 즉시 구축(폴백): 예·적금 2 + 펀드 1 ----
-def recommend_products_fallback_split(deposit_raw: pd.DataFrame, fund_raw: pd.DataFrame, user: dict):
-    dep = preprocess_products(deposit_raw, group_name="예·적금")
-    fun = preprocess_products(fund_raw,    group_name="펀드")
+    dep = preprocess_products(dep_raw, "예·적금")
+    fun = preprocess_products(fun_raw, "펀드")
 
     dep_f = rule_based_filter(dep, user)
     fun_f = rule_based_filter(fun, user)
@@ -256,20 +213,20 @@ def recommend_products_fallback_split(deposit_raw: pd.DataFrame, fund_raw: pd.Da
     if dep_f.empty and fun_f.empty:
         return pd.DataFrame({'메시지': ['조건에 맞는 상품이 없어요 😢']})
 
-    # 예·적금 2개
+    # 예·적금 2
     if not dep_f.empty:
         Xd = _get_feature_vector(dep_f)
-        idxd = faiss.IndexFlatL2(Xd.shape[1]); idxd.add(Xd)
-        _, idd = idxd.search(_get_user_vector(user), min(2, len(dep_f)))
+        idxd = build_index(Xd)
+        _, idd = index_search(idxd, _get_user_vector(user), min(2, len(dep_f)))
         rec_dep = dep_f.iloc[idd[0]].copy().head(2)
     else:
         rec_dep = pd.DataFrame(columns=dep_f.columns)
 
-    # 펀드 1개
+    # 펀드 1
     if not fun_f.empty:
         Xf = _get_feature_vector(fun_f)
-        idxf = faiss.IndexFlatL2(Xf.shape[1]); idxf.add(Xf)
-        _, idf = idxf.search(_get_user_vector(user), min(1, len(fun_f)))
+        idxf = build_index(Xf)
+        _, idf = index_search(idxf, _get_user_vector(user), min(1, len(fun_f)))
         rec_fun = fun_f.iloc[idf[0]].copy().head(1)
     else:
         rec_fun = pd.DataFrame(columns=fun_f.columns)
@@ -279,7 +236,66 @@ def recommend_products_fallback_split(deposit_raw: pd.DataFrame, fund_raw: pd.Da
     return _add_explain(out, user)
 
 # =================================
-# UI 흐름 관리
+# 결과 화면 (스케치 스타일)
+# =================================
+TYPE_DESCRIPTIONS = {
+    "안정형": "자산/연금 비율이 안정적이고 원금 보전을 선호해요. 예·적금과 초저위험 상품 위주가 좋아요.",
+    "안정추구형": "수익과 안정의 균형을 중시해요. 예·적금 + 초저위험 펀드를 소폭 섞는 구성이 적합해요.",
+    "위험중립형": "위험/수익을 균형 있게 받아들여요. 채권형·혼합형과 적금을 혼합하면 좋아요.",
+    "적극투자형": "수익을 위해 변동성을 일정 수준 허용해요. 혼합형/주식형 비중을 조금 더 높여요.",
+    "공격투자형": "높은 수익을 위해 변동성 감내도가 높아요. 주식형·테마형 등 성장지향 상품을 고려해요.",
+}
+DEFAULT_TYPE = "안정형"
+
+def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
+    fin_type = fin_type if fin_type in TYPE_DESCRIPTIONS else DEFAULT_TYPE
+    desc = TYPE_DESCRIPTIONS[fin_type]
+
+    st.markdown("""
+    <style>
+      .hero { font-size: 38px; font-weight: 800; margin: 4px 0 8px 0; }
+      .desc { font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .card {
+        border: 2px solid #eaeaea; border-radius: 18px; padding: 16px 14px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06); background: #fff;
+      }
+      .badge {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:28px; height:28px; border-radius:50%; color:#fff; font-weight:700;
+        margin-right:8px;
+      }
+      .b1{ background:#ff5a5a; } .b2{ background:#7c4dff; } .b3{ background:#10b981; }
+      .pname{ font-size:17px; font-weight:700; margin:6px 0 10px 0; }
+      .meta{ font-size:14px; line-height:1.5; }
+      .k { font-weight:700; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f'<div class="hero">{fin_type}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
+
+    colors = ["b1","b2","b3"]
+    items = rec_df.head(3).to_dict(orient="records")
+
+    html = ['<div class="cards">']
+    for i, r in enumerate(items, start=1):
+        cname = colors[i-1 if i-1 < len(colors) else -1]
+        name = str(r.get("상품명","-"))
+        mret = r.get("월예상수익금(만원)","-")
+        risk = r.get("리스크","-")
+        html.append(f"""
+          <div class="card">
+            <div><span class="badge {cname}">{i}</span><span class="pname">{name}</span></div>
+            <div class="meta"><span class="k">월 예상수익</span> {mret}만원</div>
+            <div class="meta"><span class="k">리스크</span> {risk}</div>
+          </div>
+        """)
+    html.append("</div>")
+    st.markdown("\n".join(html), unsafe_allow_html=True)
+
+# =================================
+# UI 흐름
 # =================================
 st.title("💬 시니어 금융 설문 & 추천 시스템")
 
@@ -287,6 +303,8 @@ ss = st.session_state
 ss.setdefault("flow", "choose")      # choose → predict → survey → recommend
 ss.setdefault("pred_amount", None)
 ss.setdefault("answers", {})
+ss.setdefault("prefill_survey", {})  # 예측→설문 프리필
+ss.setdefault("pred_label", None)    # 예측된 금융 유형
 
 # 공통 설문 문항
 QUESTIONS = [
@@ -303,20 +321,17 @@ QUESTIONS = [
 ]
 
 def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
-    """
-    defaults: {"income": 123, "pension": 45.6} 같이 사전으로 기본값 전달
-    lock_inferred: True면 defaults로 채운 항목을 disabled 처리
-    """
+    """설문 렌더러: defaults로 기본값 주입, lock_inferred=True면 해당 칸 비활성화"""
     st.subheader("📝 설문")
     answers = {}
     defaults = defaults or {}
 
+    # 기본값을 세션키에 심어줌(최초 1회)
     def _seed_default(key, value):
         skey = f"q_{key}"
         if (skey not in st.session_state) and (value is not None):
             st.session_state[skey] = value
 
-    # 필요한 곳에 기본값 심기
     _seed_default("income",  defaults.get("income"))
     _seed_default("pension", defaults.get("pension"))
 
@@ -325,13 +340,9 @@ def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
         disabled = lock_inferred and (key in defaults)
 
         if kind == "number":
-            answers[key] = st.number_input(
-                title, min_value=0, step=1, key=f"q_{key}", disabled=disabled
-            )
+            answers[key] = st.number_input(title, min_value=0, step=1, key=f"q_{key}", disabled=disabled)
         elif kind == "select":
-            answers[key] = st.selectbox(
-                title, q[3], key=f"q_{key}", disabled=disabled
-            )
+            answers[key] = st.selectbox(title, q[3], key=f"q_{key}", disabled=disabled)
     return answers
 
 def map_survey_to_model_input(r):
@@ -363,19 +374,15 @@ if ss.flow == "predict":
 
     if st.button("연금 예측하기"):
         if reg_model is None:
-            st.warning("연금 예측 모델이 없어 계산을 건너뜁니다.")
+            st.info("연금 예측 모델이 없어 계산을 건너뜁니다.")
+            ss.prefill_survey = {"income": income, "pension": 0}
         else:
             try:
                 X = pd.DataFrame([{"평균월소득(만원)": income, "가입기간(년)": years}])
                 amount = round(float(reg_model.predict(X)[0]), 1)
                 ss.pred_amount = amount
-        
-                # 🔽 설문 기본값으로 쓸 프리필 저장
-                ss.prefill_survey = {
-                    "income": income,   # 방금 입력한 평균 월소득
-                    "pension": amount,  # 방금 예측된 월 연금액
-                }
-                
+                # 설문 프리필 저장(자동 연결)
+                ss.prefill_survey = {"income": income, "pension": amount}
 
                 def classify_pension_type(a):
                     if a >= 90: return "완전노령연금"
@@ -395,15 +402,16 @@ if ss.flow == "predict":
                 st.info(explains[ptype])
             except Exception as e:
                 st.exception(e)
+
         ss.flow = "survey"
 
 # 2) 수령자/미수령자 공통 → 설문 → 유형 분류
 if ss.flow == "survey":
-    prefill = ss.get("prefill_survey", {})
-    answers = render_survey(defaults=prefill, lock_inferred=LOCK_INFERRED_FIELDS)
+    answers = render_survey(defaults=ss.get("prefill_survey", {}), lock_inferred=LOCK_INFERRED_FIELDS)
     if st.button("유형 분류하기"):
         if (survey_model is None) or (survey_encoder is None):
-            st.info("분류 모델이 없어 설문 결과를 저장만 하고 넘어갈게요.")
+            st.info("분류 모델이 없어 설문 결과만 저장하고 추천 단계로 넘어갈게요.")
+            ss.pred_label = answers.get("risk") or "안정형"
             ss.answers = answers
             ss.flow = "recommend"
         else:
@@ -411,14 +419,14 @@ if ss.flow == "survey":
                 arr = map_survey_to_model_input(answers)
                 pred = survey_model.predict(arr)
                 label = survey_encoder.inverse_transform(pred)[0]
+                ss.pred_label = label  # 🔸 예측된 금융 유형 저장
 
                 proba_method = getattr(survey_model, "predict_proba", None)
                 if callable(proba_method):
                     proba = proba_method(arr)
                     proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
                     st.bar_chart(proba_df.T)
-                    predicted_proba = float(proba_df[label].values[0])
-                    st.success(f"🧾 예측된 금융 유형: **{label}** (확률 {predicted_proba*100:.1f}%)")
+                    st.success(f"🧾 예측된 금융 유형: **{label}**")
                 else:
                     st.success(f"🧾 예측된 금융 유형: **{label}**")
             except Exception as e:
@@ -426,7 +434,7 @@ if ss.flow == "survey":
             ss.answers = answers
             ss.flow = "recommend"
 
-# 3) 추천: 설문 + 투자조건 입력 → 추천
+# 3) 추천: 설문 + 투자조건 입력 → 추천 (예·적금 2 + 펀드 1)
 if ss.flow == "recommend":
     st.markdown("---")
     st.subheader("🧲 금융상품 추천")
@@ -443,53 +451,19 @@ if ss.flow == "recommend":
             '투자성향': risk_choice,
             '목표월이자': target_monthly
         }
-
-        dep_idx  = saved_assets.get("deposit_index")
-        dep_meta = saved_assets.get("deposit_meta")
-        fund_idx  = saved_assets.get("fund_index")
-        fund_meta = saved_assets.get("fund_meta")
-        use_saved = (dep_idx is not None and dep_meta is not None and
-                     fund_idx is not None and fund_meta is not None)
-
-        if use_saved:
-            # ✅ 저장된 인덱스/메타데이터 사용: 예·적금 2 + 펀드 1
-            try:
-                rec_dep  = recommend_with_saved_index(dep_idx,  dep_meta,  user_pref, topk=2)
-                rec_fund = recommend_with_saved_index(fund_idx, fund_meta, user_pref, topk=1)
-            except Exception as e:
-                st.exception(e)
-                st.stop()
-
-            if "메시지" in rec_dep.columns and "메시지" in rec_fund.columns:
-                st.warning("조건에 맞는 상품이 없어요 😢")
-            else:
-                parts = []
-                if "메시지" not in rec_dep.columns:  parts.append(rec_dep)
-                if "메시지" not in rec_fund.columns: parts.append(rec_fund)
-                final_df = pd.concat(parts, ignore_index=True)
-
-                st.dataframe(final_df, use_container_width=True)
-                csv_bytes = final_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+        rec_df = recommend_fallback_split(user_pref)  # 저장 인덱스 없이도 동작
+        if "메시지" in rec_df.columns:
+            st.warning(rec_df.iloc[0, 0])
         else:
-            # ⚠️ 저장 자산이 없으면 CSV 두 개로 즉시 구축하여 예·적금 2 + 펀드 1 추천
-            try:
-                deposit_raw = load_deposit_csv()
-                fund_raw    = load_fund_csv()
-                rec_df = recommend_products_fallback_split(deposit_raw, fund_raw, user_pref)
-            except Exception as e:
-                st.exception(e)
-                st.stop()
+            # 스케치 스타일 결과 화면 렌더
+            fin_type = st.session_state.get("pred_label") or risk_choice or "안정형"
+            render_final_screen(fin_type, rec_df)
 
-            if "메시지" in rec_df.columns:
-                st.warning(rec_df.iloc[0, 0])
-            else:
-                st.dataframe(rec_df, use_container_width=True)
-                csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+            # CSV 다운로드
+            csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
 
     if st.button("처음으로 돌아가기"):
-        for k in ["flow", "pred_amount", "answers"]:
-            if k in st.session_state:
-                del st.session_state[k]
+        for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label"]:
+            if k in st.session_state: del st.session_state[k]
         st.rerun()
