@@ -24,7 +24,7 @@ FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 # =================================
 # 모델/데이터 로딩 (캐시)
 # =================================
-@st.cache_resource
+#@st.cache_resource
 def load_models():
     survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
     survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
@@ -32,7 +32,7 @@ def load_models():
     type_model     = joblib.load(os.path.join(MODELS_DIR, "type_model.pkl"))
     return survey_model, survey_encoder, reg_model, type_model
 
-@st.cache_resource
+#@st.cache_resource
 def load_saved_reco_assets():
     """저장된 추천 자산(FAISS 인덱스 + 메타데이터) 로딩"""
     assets = {
@@ -52,7 +52,7 @@ def load_saved_reco_assets():
         assets["fund_meta"]  = pd.read_parquet(fund_meta_path)
     return assets
 
-@st.cache_data
+#@st.cache_data
 def load_deposit_csv():
     path = os.path.join(BASE_DIR, DEPOSIT_CSV)
     if not os.path.exists(path):
@@ -65,7 +65,7 @@ def load_deposit_csv():
     # 최후 fallback
     return pd.read_csv(path)
 
-@st.cache_data
+#@st.cache_data
 def load_fund_csv():
     path = os.path.join(BASE_DIR, FUND_CSV)
     if not os.path.exists(path):
