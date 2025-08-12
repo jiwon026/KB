@@ -1,11 +1,33 @@
 # app.py
-import os
-import re
-import numpy as np
-import pandas as pd
-import streamlit as st
-import joblib
-import faiss
+# --- 맨 위 import들 근처에 교체 ---
+import os, re, numpy as np, pandas as pd, streamlit as st, joblib
+
+# FAISS가 없으면 sklearn으로 대체
+USE_FAISS = True
+try:
+    import faiss  # type: ignore
+except Exception as e:
+    USE_FAISS = False
+    st.warning(f"faiss 로드 실패 → sklearn.NearestNeighbors로 대체합니다. ({e})")
+    from sklearn.neighbors import NearestNeighbors
+
+def build_index(X: np.ndarray):
+    if USE_FAISS:
+        index = faiss.IndexFlatL2(X.shape[1])
+        index.add(X.astype('float32'))
+        return index
+    # sklearn 대체
+    nn = NearestNeighbors(metric="euclidean")
+    nn.fit(X.astype('float32'))
+    return nn
+
+def index_search(index, q: np.ndarray, k: int):
+    if USE_FAISS:
+        D, I = index.search(q.astype('float32'), k)
+        return D, I
+    # sklearn 대체
+    D, I = index.kneighbors(q.astype('float32'), n_neighbors=k, return_distance=True)
+    return D, I
 
 # =================================
 # 기본 설정
@@ -19,6 +41,21 @@ FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 # 에러 세부 표시 & 경로 확인용 출력(문제 해결이 끝나면 주석 처리 가능)
 st.set_option('client.showErrorDetails', True)
 st.write("BASE_DIR:", BASE_DIR)
+
+
+# 설정 아래 어딘가에 추가
+st.set_option('client.showErrorDetails', True)
+
+with st.expander("🔎 디버그 패널", expanded=True):
+    import sys
+    st.write("Python:", sys.version)
+    st.write("BASE_DIR:", os.getcwd())
+    for p in ["tabnet_model.pkl","label_encoder.pkl","reg_model.pkl",
+              "deposit_index.faiss","deposit_metadata.parquet",
+              "fund_index.faiss","fund_metadata.parquet",
+              "금융상품_3개_통합본.csv","펀드_병합본.csv"]:
+        st.write(f"{p} 존재? ", os.path.exists(os.path.join(MODELS_DIR, p)))
+
 
 # =================================
 # 모델/데이터 로딩 (캐시)
@@ -50,16 +87,20 @@ def load_saved_reco_assets():
               "fund_index": None,    "fund_meta": None}
 
     def read_parquet_safe(p):
-        if not os.path.exists(p): return None
-        try:
-            return pd.read_parquet(p)  # pyarrow/fastparquet 필요
-        except Exception:
-            # csv 백업 파일 있으면 대체
-            csv_fallback = os.path.splitext(p)[0] + ".csv"
-            if os.path.exists(csv_fallback):
-                st.info(f"{os.path.basename(p)} 대신 {os.path.basename(csv_fallback)} 사용")
+    if not os.path.exists(p): return None
+    try:
+        return pd.read_parquet(p)
+    except Exception as e:
+        st.info(f"parquet 로딩 실패({os.path.basename(p)}): {e} → CSV 폴백 시도")
+        csv_fallback = os.path.splitext(p)[0] + ".csv"
+        if os.path.exists(csv_fallback):
+            try:
                 return pd.read_csv(csv_fallback)
-            raise
+            except Exception as e2:
+                st.exception(e2)
+                return None
+        st.exception(e)
+        return None
 
     dep_idx  = os.path.join(MODELS_DIR, "deposit_index.faiss")
     dep_meta = os.path.join(MODELS_DIR, "deposit_metadata.parquet")
@@ -257,9 +298,9 @@ def recommend_products_fallback_split(deposit_raw: pd.DataFrame, fund_raw: pd.Da
 
     # 예·적금 2개
     if not dep_f.empty:
-        Xd = _get_feature_vector(dep_f)
-        idxd = faiss.IndexFlatL2(Xd.shape[1]); idxd.add(Xd)
-        _, idd = idxd.search(_get_user_vector(user), min(2, len(dep_f)))
+        X = _get_feature_vector(filtered)
+        index = build_index(X)
+        _, idx = index_search(index, _get_user_vector(user), min(topk, len(filtered)))
         rec_dep = dep_f.iloc[idd[0]].copy().head(2)
     else:
         rec_dep = pd.DataFrame(columns=dep_f.columns)
