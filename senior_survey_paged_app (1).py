@@ -21,11 +21,23 @@ PRODUCTS_CSV = "금융상품_3개_통합본.csv"
 # =================================
 @st.cache_resource
 def load_models():
-    survey_model   = joblib.load(os.path.join(MODELS_DIR, "tabnet_model.pkl"))
-    survey_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
-    reg_model      = joblib.load(os.path.join(MODELS_DIR, "reg_model.pkl"))
-    type_model     = joblib.load(os.path.join(MODELS_DIR, "type_model.pkl"))
+    def safe_load(name):
+        path = os.path.join(MODELS_DIR, name)
+        if not os.path.exists(path):
+            st.info(f"모델 파일 없음: {name} → 건너뜀")
+            return None
+        try:
+            return joblib.load(path)
+        except Exception as e:
+            st.warning(f"{name} 로드 실패: {e.__class__.__name__}: {e}")
+            return None
+
+    survey_model   = safe_load("tabnet_model.pkl")
+    survey_encoder = safe_load("label_encoder.pkl")
+    reg_model      = safe_load("reg_model.pkl")
+    type_model     = safe_load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
+
 
 @st.cache_resource
 def load_faiss_index(optional=True):
@@ -284,19 +296,25 @@ if ss.flow == "predict":
 if ss.flow == "survey":
     answers = render_survey()
     if st.button("유형 분류하기"):
-        arr = map_survey_to_model_input(answers)
-        pred = survey_model.predict(arr)
-        label = survey_encoder.inverse_transform(pred)[0]
-
-        proba = survey_model.predict_proba(arr)
-        proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
-        predicted_proba = float(proba_df[label].values[0])
-
-        st.success(f"🧾 예측된 금융 유형: **{label}** (확률 {predicted_proba*100:.1f}%)")
-        st.bar_chart(proba_df.T)
-
-        ss.answers = answers
-        ss.flow = "recommend"
+        if (survey_model is None) or (survey_encoder is None):
+            st.info("분류 모델이 없어 설문 결과만 저장하고 추천 단계로 넘어갈게요.")
+            ss.answers = answers
+            ss.flow = "recommend"
+        else:
+            try:
+                arr = map_survey_to_model_input(answers)
+                pred = survey_model.predict(arr)
+                label = survey_encoder.inverse_transform(pred)[0]
+                proba_method = getattr(survey_model, "predict_proba", None)
+                if callable(proba_method):
+                    proba = proba_method(arr)
+                    proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
+                    st.bar_chart(proba_df.T)
+                st.success(f"예측된 금융 유형: **{label}**")
+            except Exception as e:
+                st.exception(e)
+            ss.answers = answers
+            ss.flow = "recommend"
 
 # 3) 추천: 설문 + 투자조건 입력 → 추천
 if ss.flow == "recommend":
