@@ -2,6 +2,8 @@ streamlit
 pandas
 numpy
 joblib
-faiss
+faiss-cpu
 os
 re
+pyarrow
+scikit-learn
