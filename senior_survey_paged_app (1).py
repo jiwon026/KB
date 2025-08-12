@@ -251,7 +251,7 @@ def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
     fin_type = fin_type if fin_type in TYPE_DESCRIPTIONS else DEFAULT_TYPE
     desc = TYPE_DESCRIPTIONS[fin_type]
 
-    st.markdown("""
+    st.markdown(
     <style>
       .hero { font-size: 38px; font-weight: 800; margin: 4px 0 8px 0; }
       .desc { font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
@@ -270,7 +270,7 @@ def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
       .meta{ font-size:14px; line-height:1.5; }
       .k { font-weight:700; }
     </style>
-    """, unsafe_allow_html=True)
+    , unsafe_allow_html=True)
 
     st.markdown(f'<div class="hero">{fin_type}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
