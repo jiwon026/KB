@@ -251,7 +251,7 @@ def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
     fin_type = fin_type if fin_type in TYPE_DESCRIPTIONS else DEFAULT_TYPE
     desc = TYPE_DESCRIPTIONS[fin_type]
 
-    st.markdown(
+    st.markdown("""
     <style>
       .hero { font-size: 38px; font-weight: 800; margin: 4px 0 8px 0; }
       .desc { font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
@@ -270,29 +270,31 @@ def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
       .meta{ font-size:14px; line-height:1.5; }
       .k { font-weight:700; }
     </style>
-    , unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     st.markdown(f'<div class="hero">{fin_type}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
 
-    colors = ["b1","b2","b3"]
+    colors = ["b1", "b2", "b3"]
     items = rec_df.head(3).to_dict(orient="records")
 
-    html = ['<div class="cards">']
+    cards = []
     for i, r in enumerate(items, start=1):
         cname = colors[i-1 if i-1 < len(colors) else -1]
-        name = str(r.get("상품명","-"))
-        mret = r.get("월예상수익금(만원)","-")
-        risk = r.get("리스크","-")
-        html.append(f"""
-          <div class="card">
-            <div><span class="badge {cname}">{i}</span><span class="pname">{name}</span></div>
-            <div class="meta"><span class="k">월 예상수익</span> {mret}만원</div>
-            <div class="meta"><span class="k">리스크</span> {risk}</div>
-          </div>
-        """)
-    html.append("</div>")
-    st.markdown("\n".join(html), unsafe_allow_html=True)
+        name = str(r.get("상품명", "-"))
+        mret = r.get("월예상수익금(만원)", "-")
+        risk = r.get("리스크", "-")
+        card_html = (
+            f'<div class="card">'
+            f'<div><span class="badge {cname}">{i}</span><span class="pname">{name}</span></div>'
+            f'<div class="meta"><span class="k">월 예상수익</span> {mret}만원</div>'
+            f'<div class="meta"><span class="k">리스크</span> {risk}</div>'
+            f'</div>'
+        )
+        cards.append(card_html)
+
+    cards_html = '<div class="cards">' + ''.join(cards) + '</div>'
+    st.markdown(cards_html, unsafe_allow_html=True)
 
 # =================================
 # UI 흐름
