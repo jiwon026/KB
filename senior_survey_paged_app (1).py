@@ -25,23 +25,21 @@ st.write("BASE_DIR:", BASE_DIR)
 # =================================
 @st.cache_resource
 def load_models():
-    """모델 파일이 없어도 앱이 죽지 않도록 안전 로딩"""
     def safe_load(name):
         path = os.path.join(MODELS_DIR, name)
         if not os.path.exists(path):
-            st.warning(f"모델 파일 없음: {name} (이 단계는 건너뜁니다)")
-            return None
+            st.info(f"모델 파일 없음: {name} → 건너뜀"); return None
         try:
             return joblib.load(path)
         except Exception as e:
-            st.error(f"{name} 로드 실패: {e}")
+            st.warning(f"{name} 로드 실패: {e.__class__.__name__}: {e}")
             return None
-
     survey_model   = safe_load("tabnet_model.pkl")
     survey_encoder = safe_load("label_encoder.pkl")
     reg_model      = safe_load("reg_model.pkl")
     type_model     = safe_load("type_model.pkl")
     return survey_model, survey_encoder, reg_model, type_model
+
 
 @st.cache_resource
 def load_saved_reco_assets():
