@@ -511,36 +511,38 @@ def render_type_result():
             ss.flow = "main"
 
 
-def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
-    """설문 렌더러: defaults로 기본값 주입, lock_inferred=True면 해당 칸 비활성화"""
+# --- 설문 위젯 key 전용 prefix (충돌 방지) ---
+def _SURVEY_KEY(k: str) -> str:
+    return f"survey_{k}"
+
+def render_survey_form(defaults: dict | None = None, lock_inferred: bool = False):
     st.subheader("📝 설문")
     answers = {}
     defaults = defaults or {}
-    with st.form("survey_form"):
 
-        def SURVEY_KEY_FN(k: str) -> str:
-            return f"survey_{k}"  # ← 설문 전용 프리픽스
-    
-        # 기본값을 세션키에 심어줌(최초 1회)
-        def _seed_default(key, value):
-            skey = SURVEY_KEY_FN(key)
-            if (skey not in st.session_state) and (value is not None):
-                st.session_state[skey] = value
-    
-        _seed_default("income",  defaults.get("income"))
-        _seed_default("pension", defaults.get("pension"))
-    
+    # 최초 프리필 시 세션에 기본값 주입
+    def _seed_default(key, value):
+        skey = _SURVEY_KEY(key)
+        if (skey not in st.session_state) and (value is not None):
+            st.session_state[skey] = value
+
+    _seed_default("income",  defaults.get("income"))
+    _seed_default("pension", defaults.get("pension"))
+
+    with st.form("survey_form"):  # ← 폼으로 묶음: 버튼 1개만 생성됨
         for q in QUESTIONS:
             title, kind, key = q[0], q[1], q[2]
             disabled = lock_inferred and (key in defaults)
-    
-            wkey = SURVEY_KEY_FN(key)  # ← 모든 위젯 key 한곳에서 통일
+            wkey = _SURVEY_KEY(key)
+
             if kind == "number":
                 answers[key] = st.number_input(title, min_value=0, step=1, key=wkey, disabled=disabled)
             elif kind == "select":
                 answers[key] = st.selectbox(title, q[3], key=wkey, disabled=disabled)
-                
-    return answers
+
+        submitted = st.form_submit_button("유형 분류하기")  # ← 버튼은 여기 ‘한 번’만
+
+    return answers, submitted
 
 def map_survey_to_model_input(r):
     gender = 0 if r["gender"] == "남성" else 1
@@ -558,31 +560,36 @@ def map_survey_to_model_input(r):
 if ss.flow == "main":
     render_main_big()
 elif ss.flow == "survey":
-    answers = render_survey(defaults=ss.get("prefill_survey", {}), lock_inferred=LOCK_INFERRED_FIELDS)
-    if st.button("유형 분류하기"):
+    answers, submitted = render_survey_form(
+        defaults=ss.get("prefill_survey", {}),
+        lock_inferred=LOCK_INFERRED_FIELDS
+    )
+
+    if submitted:
         if (survey_model is None) or (survey_encoder is None):
             st.info("분류 모델이 없어 설문 결과만 저장하고 추천 단계로 넘어갈게요.")
             ss.pred_label = answers.get("risk") or "안정형"
             ss.answers = answers
-            ss.flow = "recommend"
+            ss.flow = "result"  # 설문 완료 → 결과 화면
         else:
             try:
                 arr = map_survey_to_model_input(answers)
                 pred = survey_model.predict(arr)
                 tabnet_label = survey_encoder.inverse_transform(pred)[0].strip()
-                
-                st.session_state["tabnet_label"] = tabnet_label   # ← 표시용 금융유형
-                st.session_state["pred_label"]   = tabnet_label   # ← 과거 호환
-                st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
-                
+
+                st.session_state["tabnet_label"] = tabnet_label
+                st.session_state["pred_label"]   = tabnet_label  # (호환용)
+                ss.answers = answers
+
+                # 확률표시(선택)
                 proba_method = getattr(survey_model, "predict_proba", None)
                 if callable(proba_method):
                     proba = proba_method(arr)
                     proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
                     st.bar_chart(proba_df.T)
-                
-                ss.answers = answers
-                ss.flow = "result"     # ← 설문 끝나면 결과 화면으로 이동
+
+                st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
+                ss.flow = "result"
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 elif ss.flow == "result":
