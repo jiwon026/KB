@@ -774,38 +774,77 @@ elif ss.flow == "recommend":
 
 elif ss.flow == "predict":
     st.subheader("📈 연금 계산기")
-    income = st.number_input("평균 월소득(만원)", min_value=0, step=1, key="pred_income")
-    years  = st.number_input("국민연금 가입기간(년)", min_value=0, max_value=50, step=1, key="pred_years")
 
-    if st.button("연금 예측하기"):
+    # 폼으로 묶어 중복 버튼/리렌더 방지
+    with st.form("predict_form"):
+        income = st.number_input("평균 월소득(만원)", min_value=0, step=1, key="pred_income")
+        years  = st.number_input("국민연금 가입기간(년)", min_value=0, max_value=50, step=1, key="pred_years")
+        pred_submit = st.form_submit_button("연금 예측하기")
+
+    if pred_submit:
         if reg_model is None:
-            st.info("연금 예측 모델이 없어 계산을 건너뜁니다.")
+            # 모델 없어도 설문으로 이동 가능하게 프리필 0원 세팅
             ss.prefill_survey = {"income": income, "pension": 0}
+            st.info("연금 예측 모델이 없어 계산을 건너뜁니다.")
+            st.session_state["predicted"] = True
+            st.session_state["pred_amount"] = 0.0
+            st.rerun()
         else:
             try:
                 X = pd.DataFrame([{"평균월소득(만원)": income, "가입기간(년)": years}])
                 amount = round(float(reg_model.predict(X)[0]), 1)
-                ss.pred_amount = amount
-                # 설문 프리필 저장(자동 연결)
+
+                # 결과/프리필 저장
                 ss.prefill_survey = {"income": income, "pension": amount}
-
-                def classify_pension_type(a):
-                    if a >= 90: return "완전노령연금"
-                    if a >= 60: return "조기노령연금"
-                    if a >= 30: return "감액노령연금"
-                    return "특례노령연금"
-
-                ptype = classify_pension_type(amount)
-                explains = {
-                    "조기노령연금": "※ 만 60세부터 수령 가능하나 최대 30% 감액될 수 있어요.",
-                    "완전노령연금": "※ 만 65세부터 감액 없이 정액 수령이 가능해요.",
-                    "감액노령연금": "※ 일정 조건을 만족하지 못할 경우 감액되어 수령됩니다.",
-                    "특례노령연금": "※ 가입기간이 짧더라도 일정 기준 충족 시 수령 가능."
-                }
-                st.success(f"💰 예측 연금 수령액: **{amount}만원/월**")
-                st.markdown(f"📂 예측 연금 유형: **{ptype}**")
-                st.info(explains[ptype])
+                ss.pred_amount = amount
+                st.session_state["predicted"] = True
+                st.session_state["pred_amount"] = amount
+                st.rerun()
             except Exception as e:
                 st.exception(e)
 
+    # 예측이 끝났으면 결과 + 네비게이션 버튼 노출
+    if st.session_state.get("predicted"):
+        amt = st.session_state.get("pred_amount", 0.0)
+
+        # 보조설명(선택)
+        def classify_pension_type(a):
+            if a >= 90: return "완전노령연금"
+            if a >= 60: return "조기노령연금"
+            if a >= 30: return "감액노령연금"
+            return "특례노령연금"
+        ptype = classify_pension_type(amt)
+        explains = {
+            "조기노령연금": "※ 만 60세부터 수령 가능하나 최대 30% 감액될 수 있어요.",
+            "완전노령연금": "※ 만 65세부터 감액 없이 정액 수령이 가능해요.",
+            "감액노령연금": "※ 일정 조건을 만족하지 못할 경우 감액되어 수령됩니다.",
+            "특례노령연금": "※ 가입기간이 짧더라도 일정 기준 충족 시 수령 가능."
+        }
+
+        st.success(f"💰 예측 연금 수령액: **{amt}만원/월**")
+        st.caption(f"예측 연금 유형: **{ptype}**")
+        st.info(explains[ptype])
+
+        st.markdown("---")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("👉 설문으로 진행", key="pred_go_survey"):
+                ss.flow = "survey"
+                st.rerun()
+        with c2:
+            if st.button("🧲 바로 추천 보기", key="pred_go_reco"):
+                # 설문을 건너뛰는 경우도 있으니, 최소 기본값 보장
+                ss.answers = ss.get("answers", {})
+                ss.flow = "recommend"
+                st.rerun()
+        with c3:
+            if st.button("🏠 메인으로", key="pred_go_main"):
+                ss.flow = "main"
+                st.rerun()
+
+    # 예측 전이라도 이동하고 싶다면(옵션)
+    st.markdown("---")
+    if st.button("건너뛰고 설문으로", key="pred_skip_to_survey"):
         ss.flow = "survey"
+        st.rerun()
+
