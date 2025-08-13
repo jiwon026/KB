@@ -573,19 +573,21 @@ if ss.flow == "recommend":
             df_base = pd.DataFrame(log_base)
             df_invest = pd.DataFrame(log_invest)
             
-            fig, ax = plt.subplots(figsize=(8, 4.5))
-            if not df_base.empty:
-                ax.plot(df_base['나이'], df_base['잔액'], label=f'기본 시나리오 ({int(base_return*100)}%)')
-            if not df_invest.empty:
-                ax.plot(df_invest['나이'], df_invest['잔액'], linestyle='--',
-                        label=f'금융상품 적용 ({int(invest_return*100)}%)')
-            ax.axhline(0, linestyle=':', linewidth=1)
-            ax.set_title("자산 잔액 시나리오 비교")
-            ax.set_xlabel("나이")
-            ax.set_ylabel("잔액(만원)")
-            ax.grid(True, alpha=0.3)
-            ax.legend()
-            st.pyplot(fig)
+            if not df_base.empty and not df_invest.empty:
+                df_base = df_base[['나이', '잔액']].rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'})
+                df_invest = df_invest[['나이', '잔액']].rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'})
+                chart_df = pd.merge(df_base, df_invest, on='나이', how='outer').set_index('나이')
+            
+                st.markdown("#### 📊 자산 잔액 시나리오 비교")
+                st.line_chart(chart_df)
+            elif not df_base.empty:
+                df_base = df_base[['나이', '잔액']].rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'}).set_index('나이')
+                st.markdown("#### 📊 자산 잔액 시나리오 비교")
+                st.line_chart(df_base)
+            elif not df_invest.empty:
+                df_invest = df_invest[['나이', '잔액']].rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'}).set_index('나이')
+                st.markdown("#### 📊 자산 잔액 시나리오 비교")
+                st.line_chart(df_invest)
 
             # CSV 다운로드
             csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
