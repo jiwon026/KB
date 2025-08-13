@@ -6,6 +6,64 @@ import streamlit as st
 import joblib
 import faiss
 
+# ====== 노후 시나리오 유틸 ======
+import matplotlib.pyplot as plt
+
+def retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                          inflation_rate=0.03, investment_return=0.02):
+    asset = float(current_assets)
+    yearly_log = []
+    expense = float(monthly_expense)
+    depletion_age = None
+
+    for age in range(int(current_age), int(end_age) + 1):
+        annual_income = float(monthly_income) * 12.0
+        annual_expense = float(expense) * 12.0
+        delta = annual_income - annual_expense
+        asset += delta
+        if asset > 0:
+            asset *= (1.0 + float(investment_return))
+
+        yearly_log.append({
+            "나이": age,
+            "수입": round(annual_income),
+            "지출": round(annual_expense),
+            "증감": round(delta),
+            "잔액": round(asset)
+        })
+
+        if asset <= 0 and depletion_age is None:
+            depletion_age = age
+            break
+
+        expense *= (1.0 + float(inflation_rate))
+
+    return yearly_log, depletion_age
+
+
+def simulate_with_product(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                          product_kind="정기예금(+1%p)", extra_monthly=0.0,
+                          base_infl=0.03, base_ret=0.02):
+    """
+    product_kind:
+      - '정기예금(+1%p)': 수익률을 +1%p
+      - '채권혼합(+2%p)': 수익률을 +2%p
+      - '즉시연금(월현금흐름)': extra_monthly 만큼 월소득 추가
+    """
+    if product_kind == "정기예금(+1%p)":
+        return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                     inflation_rate=base_infl, investment_return=base_ret + 0.01)
+    elif product_kind == "채권혼합(+2%p)":
+        return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                     inflation_rate=base_infl, investment_return=base_ret + 0.02)
+    elif product_kind == "즉시연금(월현금흐름)":
+        return retirement_simulation(current_age, end_age, current_assets, monthly_income + extra_monthly, monthly_expense,
+                                     inflation_rate=base_infl, investment_return=base_ret)
+    else:
+        return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                     inflation_rate=base_infl, investment_return=base_ret)
+
+
 # =================================
 # 기본 설정
 # =================================
@@ -333,3 +391,76 @@ if ss.flow == "recommend":
         for k in ["flow", "pred_amount", "answers"]:
             if k in st.session_state: del st.session_state[k]
         st.rerun()
+
+# ====== 노후 시나리오 섹션 ======
+st.markdown("---")
+st.subheader("💰 노후 시나리오 시뮬레이션")
+
+# 1) 연금 금액 결정: (설문 or 예측) → 우선순위: 세션의 예측 연금 > 설문 응답
+default_pension = None
+if "predicted_pension" in st.session_state and st.session_state.predicted_pension:
+    default_pension = float(st.session_state.predicted_pension)
+elif "responses" in st.session_state and st.session_state.responses.get("pension") is not None:
+    default_pension = float(st.session_state.responses["pension"])
+
+colA, colB, colC = st.columns(3)
+current_age = colA.number_input("현재 나이", min_value=50, max_value=100, value=int(st.session_state.responses.get("age", 67)) if "responses" in st.session_state else 67)
+end_age     = colB.number_input("예상 수명", min_value=80, max_value=105, value=95)
+pension     = colC.number_input("월 연금(만원)", min_value=0.0, value=float(default_pension) if default_pension is not None else 80.0)
+
+colD, colE, colF = st.columns(3)
+other_income    = colD.number_input("기타 월 소득(만원)", min_value=0.0, value=float(st.session_state.responses.get("income", 0)) if "responses" in st.session_state else 10.0)
+monthly_expense = colE.number_input("월 지출(만원)", min_value=0.0, value=float(st.session_state.responses.get("living_cost", 130)) if "responses" in st.session_state else 130.0)
+current_assets  = colF.number_input("현재 자산(만원)", min_value=0.0, value=float(st.session_state.responses.get("assets", 9000)) if "responses" in st.session_state else 9000.0)
+
+colG, colH = st.columns(2)
+inflation_rate   = colG.number_input("연 물가상승률(%)", min_value=0.0, max_value=10.0, value=3.0) / 100.0
+investment_return= colH.number_input("연 수익률(%)", min_value=0.0, max_value=15.0, value=2.0) / 100.0
+
+# 2) 상품 적용 옵션
+st.markdown("#### 📦 상품 적용 옵션")
+product_kind = st.selectbox("적용 상품", ["없음", "정기예금(+1%p)", "채권혼합(+2%p)", "즉시연금(월현금흐름)"])
+extra_monthly = 0.0
+if product_kind == "즉시연금(월현금흐름)":
+    extra_monthly = st.number_input("즉시연금 월 수령액(만원)", min_value=0.0, value=30.0)
+
+# 3) 실행
+if st.button("시뮬레이션 실행"):
+    base_log, base_depletion = retirement_simulation(
+        current_age, end_age, current_assets,
+        monthly_income=pension + other_income,
+        monthly_expense=monthly_expense,
+        inflation_rate=inflation_rate,
+        investment_return=investment_return
+    )
+
+    prod_log, prod_depletion = simulate_with_product(
+        current_age, end_age, current_assets,
+        monthly_income=pension + other_income,
+        monthly_expense=monthly_expense,
+        product_kind=product_kind if product_kind != "없음" else None,
+        extra_monthly=extra_monthly,
+        base_infl=inflation_rate,
+        base_ret=investment_return
+    )
+
+    # 4) 결과 메시지
+    if base_depletion:
+        st.warning(f"⚠️ 자산은 약 **{base_depletion}세**에 고갈될 수 있어요.")
+    else:
+        st.info("🎉 자산이 고갈되지 않고 유지될 수 있어요.")
+
+    # 5) 그래프 (자산 추이 비교)
+    df_base = pd.DataFrame(base_log)
+    df_prod = pd.DataFrame(prod_log)
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(df_base['나이'], df_base['잔액'], label='기본 시나리오 (기본수익률)', linewidth=2)
+    ax.plot(df_prod['나이'], df_prod['잔액'], label=f'상품 적용 시나리오 ({product_kind})', linestyle='--', linewidth=2)
+    ax.axhline(0, color='gray', linestyle=':')
+    ax.set_title("💰 자산 시나리오 비교")
+    ax.set_xlabel("나이")
+    ax.set_ylabel("잔액 (만원)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    st.pyplot(fig)
