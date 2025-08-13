@@ -529,6 +529,19 @@ if ss.flow == "recommend":
             fin_type = st.session_state.get("pred_label") or risk_choice or "안정형"
             render_final_screen(fin_type, rec_df)
 
+            st.session_state["rec_df"] = rec_df
+            st.session_state["fin_type"] = fin_type
+            st.session_state["show_reco"] = True
+    # 재실행 후에도 결과 유지
+    if st.session_state.get("show_reco") and ("rec_df" in st.session_state):
+        rec_df = st.session_state["rec_df"]
+        fin_type = st.session_state.get("fin_type") or risk_choice or "안정형"
+        # 여기서 render_final_screen(fin_type, rec_df) 호출
+        render_final_screen(fin_type, rec_df)
+        # 아래에 “시뮬레이션 폼 + 상품별 그래프” 블록이 이어지도록 배치
+
+
+            
             # =================================
             # [NEW] 시뮬레이션 & 근거 + 지표 + 그래프
             # =================================
@@ -580,74 +593,78 @@ if ss.flow == "recommend":
             # -------------------------------------------------
             if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
             
+                # ===== 시뮬레이션 가정값 폼 =====
                 st.markdown("### ⚙️ 시뮬레이션 가정값")
                 with st.form("sim_form"):
                     colA, colB = st.columns(2)
                     with colA:
-                        inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1, key="inflation_pct_form")
+                        inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 
+                                                  float(st.session_state.get("sim_inputs", {}).get("inflation_pct", 3.0)),
+                                                  0.1, key="inflation_pct_form")
                     with colB:
-                        base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1, key="base_return_pct_form")
-            
+                        base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 
+                                                    float(st.session_state.get("sim_inputs", {}).get("base_return_pct", 2.0)),
+                                                    0.1, key="base_return_pct_form")
                     submitted = st.form_submit_button("시뮬레이션 실행")
-            
-                # 설문 기반 입력값(없으면 안전한 기본값)
-                ans = st.session_state.get("answers", {})
-                current_age     = int(ans.get("age", 67))
-                end_age         = 100
-                current_assets  = float(ans.get("assets", 9000))
-                pension_month   = float(ans.get("pension", 0))
-                income_month    = float(ans.get("income", 0))
-                monthly_income  = pension_month + income_month
-                monthly_expense = float(ans.get("living_cost", 130))
-            
-                # 제출되었을 때만 계산
+                
+                # 제출 시 상태 저장
                 if submitted:
-                    # 입력 저장(필요 시 재사용)
                     st.session_state["sim_inputs"] = {
-                        "inflation_pct": inflation_pct,
-                        "base_return_pct": base_return_pct
+                        "inflation_pct": float(inflation_pct),
+                        "base_return_pct": float(base_return_pct)
                     }
-            
-                    # 소수로 변환
-                    inflation = inflation_pct / 100.0
-                    base_return = base_return_pct / 100.0
-            
-                    # 기본 시나리오(공용) 계산
+                    st.session_state["sim_ready"] = True
+                
+                # 저장된 값이 있으면 항상 사용
+                sim_ready = st.session_state.get("sim_ready", False)
+                sim_inputs = st.session_state.get("sim_inputs", {"inflation_pct": 3.0, "base_return_pct": 2.0})
+                inflation_pct = float(sim_inputs["inflation_pct"])
+                base_return_pct = float(sim_inputs["base_return_pct"])
+                inflation = inflation_pct / 100.0
+                base_return = base_return_pct / 100.0
+                
+                if sim_ready and ("rec_df" in st.session_state):
+                    rec_df = st.session_state["rec_df"]
+                    # 설문값 준비
+                    ans = st.session_state.get("answers", {})
+                    current_age     = int(ans.get("age", 67))
+                    end_age         = 100
+                    current_assets  = float(ans.get("assets", 9000))
+                    pension_month   = float(ans.get("pension", 0))
+                    income_month    = float(ans.get("income", 0))
+                    monthly_income  = pension_month + income_month
+                    monthly_expense = float(ans.get("living_cost", 130))
+                
+                    # 기본 시나리오(공용)
                     log_base, _ = retirement_simulation(
                         current_age, end_age, current_assets, monthly_income, monthly_expense,
                         inflation_rate=inflation, investment_return=base_return
                     )
-                    df_b = (pd.DataFrame(log_base)[['나이', '잔액']]
-                              .rename(columns={'잔액': '기본 시나리오'})
-                            ) if log_base else pd.DataFrame()
-            
-                    # 상품별 탭: 각 상품 수익률(추천값) vs 기본 시나리오 비교
+                    df_b = (pd.DataFrame(log_base)[['나이','잔액']]
+                            .rename(columns={'잔액':'기본 시나리오'}) if log_base else pd.DataFrame())
+                
+                    # ===== 상품별 탭 비교 그래프 =====
                     st.markdown("### 📈 추천 상품별 적용 시나리오")
                     rec_records = rec_df.to_dict(orient="records")
                     tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
-            
+                
                     for tab, r in zip(tabs, rec_records):
                         with tab:
-                            # 추천 수익률(%): 숫자(0.05) 우선, 없으면 '5.1%' 파싱
+                            # 수익률 가져오기(숫자형 우선, 없으면 %파싱)
                             if '예상수익률' in r and r['예상수익률'] is not None:
                                 prod_return_pct = float(r['예상수익률']) * 100.0
                             else:
-                                txt = str(r.get('예상수익률(연)', '0')).replace('%','')
-                                try:
-                                    prod_return_pct = float(txt)
-                                except:
-                                    prod_return_pct = 5.0  # 안전 기본
-            
+                                txt = str(r.get('예상수익률(연)','0')).replace('%','')
+                                try: prod_return_pct = float(txt)
+                                except: prod_return_pct = 5.0
                             prod_return = prod_return_pct / 100.0
-            
-                            # 상품 적용 시나리오(폼 입력 가정값 반영)
+                
                             log_prod, _ = retirement_simulation(
                                 current_age, end_age, current_assets, monthly_income, monthly_expense,
                                 inflation_rate=inflation, investment_return=prod_return
                             )
-                            df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
-            
-                            # 비교 그래프 (기본 vs 해당 상품)
+                            df_p = pd.DataFrame(log_prod)[['나이','잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+                
                             st.caption(
                                 f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
                                 f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
@@ -655,9 +672,9 @@ if ss.flow == "recommend":
                             chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
                                         if not df_b.empty else df_p.set_index('나이'))
                             st.line_chart(chart_df)
-            
                 else:
                     st.info("위의 가정값을 설정한 뒤 **시뮬레이션 실행**을 눌러 그래프를 확인하세요.")
+
             else:
                 st.info("추천 상품별 시나리오를 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
 
