@@ -195,8 +195,12 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     out = df.copy()
     out['월예상수익금(만원)'] = (out['예상수익률'].astype(float) * user['투자금액'] / 12.0).round(1)
     out['투자기간(개월)'] = out['권장투자기간'].astype(int)
+
+    # ⬇️ 숫자형 그대로 보존 + 보기용 문자열 컬럼 따로
+    out['예상수익률'] = out['예상수익률'].astype(float)             # ← 숫자(0.05 같은 소수)
     out['예상수익률(연)'] = (out['예상수익률'] * 100).round(2).astype(str) + '%'
-    cols = ['구분','상품명','월예상수익금(만원)','예상수익률(연)','리스크','투자기간(개월)']
+
+    cols = ['구분','상품명','월예상수익금(만원)','예상수익률','예상수익률(연)','리스크','투자기간(개월)']
     return out[cols]
 
 def recommend_fallback_split(user: dict) -> pd.DataFrame:
@@ -587,38 +591,35 @@ if ss.flow == "recommend":
             # -------------------------------------------------
             # [NEW] 각 추천 상품별 적용 시나리오 탭
             # -------------------------------------------------
-            if ("상품명" in rec_df.columns) and ("예상수익률" in rec_df.columns):
-                st.markdown("### 📈 추천 상품별 적용 시나리오")
-                rec_records = rec_df.to_dict(orient="records")
-                tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
-            
-                for tab, r in zip(tabs, rec_records):
-                    with tab:
-                        # 연 수익률(소수) 보정
-                        try:
-                            prod_return = float(str(r.get("예상수익률", 0)).replace("%",""))  # 혹시 문자열이면 숫자만
-                            prod_return = prod_return/100.0 if prod_return > 1 else prod_return
-                        except:
-                            prod_return = invest_return
-            
-                        # 시나리오: 기본 2% vs 해당 상품 수익률
-                        log_prod, _ = retirement_simulation(
-                            current_age, end_age, current_assets, monthly_income, monthly_expense,
-                            inflation_rate=0.03, investment_return=prod_return
-                        )
-            
-                        df_b = pd.DataFrame(log_base)[['나이', '잔액']].rename(columns={'잔액': '기본 시나리오'}) if log_base else pd.DataFrame()
-                        df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
-            
-                        if not df_b.empty:
-                            chart_df = pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
-                        else:
-                            chart_df = df_p.set_index('나이')
-            
-                        st.caption(f"가정 수익률: 기본 **{int(base_return*100)}%**, 해당 상품 **{round(prod_return*100,1)}%**")
-                        st.line_chart(chart_df)
-            else:
-                st.info("추천 상품별 시뮬레이션을 표시하려면 '상품명'과 '예상수익률' 컬럼이 필요합니다.")
+            if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
+            st.markdown("### 📈 추천 상품별 적용 시나리오")
+            rec_records = rec_df.to_dict(orient="records")
+            tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+        
+            for tab, r in zip(tabs, rec_records):
+                with tab:
+                    # ⬇️ 숫자형 우선, 없으면 문자열(‘%’) 파싱
+                    if '예상수익률' in r and r['예상수익률'] is not None:
+                        prod_return = float(r['예상수익률'])  # 0.05 같은 소수
+                    else:
+                        txt = str(r.get('예상수익률(연)', '0')).replace('%','')
+                        prod_return = float(txt)/100.0 if txt else 0.0
+        
+                    log_prod, _ = retirement_simulation(
+                        current_age, end_age, current_assets, monthly_income, monthly_expense,
+                        inflation_rate=0.03, investment_return=prod_return
+                    )
+        
+                    df_b = pd.DataFrame(log_base)[['나이', '잔액']].rename(columns={'잔액': '기본 시나리오'}) if log_base else pd.DataFrame()
+                    df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+        
+                    chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                                if not df_b.empty else df_p.set_index('나이'))
+        
+                    st.caption(f"가정 수익률: 기본 **{int(0.02*100)}%**, 해당 상품 **{round(prod_return*100,1)}%**")
+                    st.line_chart(chart_df)
+        else:
+            st.info("추천 상품별 시뮬레이션을 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
 
             # CSV 다운로드
             csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
