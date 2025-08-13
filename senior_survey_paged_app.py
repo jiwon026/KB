@@ -577,6 +577,8 @@ elif ss.flow == "survey":
                 
                 ss.answers = answers
                 ss.flow = "result"     # ← 설문 끝나면 결과 화면으로 이동
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
     render_survey_page()
 elif ss.flow == "result":
     render_type_result()
