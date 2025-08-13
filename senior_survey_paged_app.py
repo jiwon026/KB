@@ -775,7 +775,7 @@ elif ss.flow == "recommend":
         for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label"]:
             if k in st.session_state: del st.session_state[k]
         st.rerun()
-    render_recommend_page()
+    render_recommend()
 elif ss.flow == "predict":
     st.subheader("📈 연금 계산기")
     income = st.number_input("평균 월소득(만원)", min_value=0, step=1, key="pred_income")
