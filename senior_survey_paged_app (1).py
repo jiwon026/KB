@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import joblib
+import matplotlib.pyplot as plt
 
 # (FAISS 있으면 사용, 없으면 sklearn으로 대체)
 USE_FAISS = True
@@ -236,6 +237,72 @@ def recommend_fallback_split(user: dict) -> pd.DataFrame:
     return _add_explain(out, user)
 
 # =================================
+# [NEW] 노후 시뮬레이션 유틸
+# =================================
+def retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                          inflation_rate=0.03, investment_return=0.02):
+    asset = float(current_assets)
+    yearly_log = []
+    expense = float(monthly_expense)
+    depletion_age = None
+
+    for age in range(int(current_age), int(end_age) + 1):
+        annual_income = float(monthly_income) * 12
+        annual_expense = float(expense) * 12
+        delta = annual_income - annual_expense
+        asset += delta
+        if asset > 0:
+            asset *= (1 + float(investment_return))
+
+        yearly_log.append({
+            "나이": age,
+            "수입": round(annual_income),
+            "지출": round(annual_expense),
+            "증감": round(delta),
+            "잔액": round(asset)
+        })
+
+        if asset <= 0 and depletion_age is None:
+            depletion_age = age
+            break
+
+        expense *= (1 + float(inflation_rate))
+
+    return yearly_log, depletion_age
+
+def simulate_with_financial_product(current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                    invest_return=0.05):
+    return retirement_simulation(current_age, end_age, current_assets,
+                                 monthly_income, monthly_expense,
+                                 inflation_rate=0.03, investment_return=invest_return)
+
+def get_invest_return_from_risk(risk_level: str) -> float:
+    """유형/선택 위험도를 투자수익률 가정으로 변환"""
+    if risk_level in ["안정형", "안정추구형"]:
+        return 0.03
+    if risk_level in ["위험중립형"]:
+        return 0.05
+    if risk_level in ["적극투자형", "공격투자형", "공격형"]:
+        return 0.07
+    return 0.05
+
+def recommend_reason_from_simulation(depletion_age, current_age, current_assets,
+                                     monthly_income, monthly_expense, risk_level: str):
+    """그래프/시뮬레이션 결과에 근거한 추천 이유 메시지"""
+    surplus = monthly_income - monthly_expense
+    if depletion_age:
+        if surplus <= 0:
+            return f"{depletion_age}세에 자산 고갈 예상 · 현금흐름 보강이 시급합니다."
+        if current_assets < 10000:
+            return f"{depletion_age}세 자산 고갈 위험 · 절세형/분산형 상품으로 수익률 제고가 필요합니다."
+        return f"{depletion_age}세 자산 고갈 위험 · 위험도('{risk_level}')에 맞는 수익원 다변화가 필요합니다."
+    # 고갈 없을 때
+    if current_assets >= 20000 and surplus > 0:
+        return f"자산/현금흐름이 양호합니다 · '{risk_level}'에 맞춘 분산투자로 실질가치(물가 3%) 방어를 권장합니다."
+    return "지출 구조를 점검하고 비과세/저비용 상품으로 실질 수익률을 높이세요."
+
+
+# =================================
 # 결과 화면 (스케치 스타일)
 # =================================
 TYPE_DESCRIPTIONS = {
@@ -460,6 +527,65 @@ if ss.flow == "recommend":
             # 스케치 스타일 결과 화면 렌더
             fin_type = st.session_state.get("pred_label") or risk_choice or "안정형"
             render_final_screen(fin_type, rec_df)
+
+            # =================================
+            # [NEW] 시뮬레이션 & 근거 출력
+            # =================================
+            # 설문 응답에서 시뮬레이션 입력 추출 (가능하면 설문 기반으로)
+            ans = st.session_state.get("answers", {})
+            current_age     = int(ans.get("age", 67))
+            end_age         = 100
+            current_assets  = float(ans.get("assets", 9000))
+            pension_month   = float(ans.get("pension", 0))
+            income_month    = float(ans.get("income", 0))
+            monthly_income  = pension_month + income_month
+            monthly_expense = float(ans.get("living_cost", 130))
+            
+            # 기본(보수적) vs 금융상품 적용(위험도 기반) 시나리오
+            base_return = 0.02
+            invest_return = get_invest_return_from_risk(fin_type or risk_choice)
+            
+            log_base, depletion_base = retirement_simulation(
+                current_age, end_age, current_assets, monthly_income, monthly_expense,
+                inflation_rate=0.03, investment_return=base_return
+            )
+            log_invest, depletion_invest = simulate_with_financial_product(
+                current_age, end_age, current_assets, monthly_income, monthly_expense,
+                invest_return=invest_return
+            )
+            
+            # 추천 이유(유형 설명 밑) 출력
+            reason_text = recommend_reason_from_simulation(
+                depletion_base, current_age, current_assets, monthly_income, monthly_expense, fin_type
+            )
+            st.info(f"🔎 추천 근거: {reason_text}")
+            
+            # 고갈 나이 표시
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("기본 시나리오(연 {0:.0f}%) 고갈 나이".format(base_return*100),
+                          value=f"{depletion_base}세" if depletion_base else "고갈 없음")
+            with col2:
+                st.metric("금융상품 적용(연 {0:.0f}%) 고갈 나이".format(invest_return*100),
+                          value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
+            
+            # 그래프 (카드 아래 표시)
+            df_base = pd.DataFrame(log_base)
+            df_invest = pd.DataFrame(log_invest)
+            
+            fig, ax = plt.subplots(figsize=(8, 4.5))
+            if not df_base.empty:
+                ax.plot(df_base['나이'], df_base['잔액'], label=f'기본 시나리오 ({int(base_return*100)}%)')
+            if not df_invest.empty:
+                ax.plot(df_invest['나이'], df_invest['잔액'], linestyle='--',
+                        label=f'금융상품 적용 ({int(invest_return*100)}%)')
+            ax.axhline(0, linestyle=':', linewidth=1)
+            ax.set_title("자산 잔액 시나리오 비교")
+            ax.set_xlabel("나이")
+            ax.set_ylabel("잔액(만원)")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            st.pyplot(fig)
 
             # CSV 다운로드
             csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
