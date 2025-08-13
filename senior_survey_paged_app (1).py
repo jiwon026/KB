@@ -572,21 +572,7 @@ if ss.flow == "recommend":
                 st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
                           value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
             
-            # 전체 비교 그래프 (streamlit 내장)
-            df_base = pd.DataFrame(log_base)[['나이', '잔액']] if log_base else pd.DataFrame(columns=['나이','잔액'])
-            df_invest = pd.DataFrame(log_invest)[['나이', '잔액']] if log_invest else pd.DataFrame(columns=['나이','잔액'])
             
-            if not df_base.empty or not df_invest.empty:
-                st.markdown("#### 📊 자산 잔액 시나리오 비교")
-                if not df_base.empty and not df_invest.empty:
-                    df_base = df_base.rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'})
-                    df_invest = df_invest.rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'})
-                    chart_df = pd.merge(df_base, df_invest, on='나이', how='outer').set_index('나이')
-                    st.line_chart(chart_df)
-                elif not df_base.empty:
-                    st.line_chart(df_base.rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'}).set_index('나이'))
-                elif not df_invest.empty:
-                    st.line_chart(df_invest.rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'}).set_index('나이'))
             
             # -------------------------------------------------
             # [NEW] 각 추천 상품별 적용 시나리오 탭
