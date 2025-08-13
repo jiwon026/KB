@@ -658,8 +658,23 @@ elif ss.flow == "recommend":
         base_return   = 0.02
         invest_return = get_invest_return_from_risk(risk_choice)
         
-        log_base, depletion_base = retirement_simulation(...)
-        log_invest, depletion_invest = simulate_with_financial_product(..., invest_return=invest_return)
+        log_base, depletion_base = retirement_simulation(
+            current_age=current_age,
+            end_age=end_age,
+            current_assets=current_assets,
+            monthly_income=monthly_income,
+            monthly_expense=monthly_expense,
+            inflation_rate=0.03,          # 물가 가정
+            investment_return=base_return # 기본 수익률 가정
+        )
+        log_invest, depletion_invest = simulate_with_financial_product(
+            current_age=current_age,
+            end_age=end_age,
+            current_assets=current_assets,
+            monthly_income=monthly_income,
+            monthly_expense=monthly_expense,
+            invest_return=invest_return
+        )
         
         reason_text = recommend_reason_from_simulation(
             depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
