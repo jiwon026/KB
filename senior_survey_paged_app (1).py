@@ -306,18 +306,38 @@ def recommend_reason_from_simulation(depletion_age, current_age, current_assets,
 # =================================
 # 결과 화면 (스케치 스타일)
 # =================================
-TYPE_DESCRIPTIONS = {
+# 설명 사전들 (파일 상단에 선언)
+RISK_STYLE_DESCRIPTIONS = {
     "안정형": "자산/연금 비율이 안정적이고 원금 보전을 선호해요. 예·적금과 초저위험 상품 위주가 좋아요.",
     "안정추구형": "수익과 안정의 균형을 중시해요. 예·적금 + 초저위험 펀드를 소폭 섞는 구성이 적합해요.",
     "위험중립형": "위험/수익을 균형 있게 받아들여요. 채권형·혼합형과 적금을 혼합하면 좋아요.",
     "적극투자형": "수익을 위해 변동성을 일정 수준 허용해요. 혼합형/주식형 비중을 조금 더 높여요.",
     "공격투자형": "높은 수익을 위해 변동성 감내도가 높아요. 주식형·테마형 등 성장지향 상품을 고려해요.",
+    "위험취약형": "손실 회피 성향이 매우 큽니다. 원금 보전이 최우선이며 예·적금, MMF, 초저위험 채권형 위주가 적합합니다."
 }
-DEFAULT_TYPE = "안정형"
+TABNET_TYPE_DESCRIPTIONS = {
+    "자산운용형": "💼 투자 여력이 충분한 유형으로, 운용 전략 중심의 포트폴리오가 적합합니다.",
+    "위험취약형": "⚠️ 재무 위험이 높은 유형입니다. 지출 관리와 복지 연계가 필요합니다.",
+    "균형형": "⚖️ 자산과 연금이 안정적인 편으로, 보수적인 전략이 적합합니다.",
+    "고소비형": "💳 소비가 많은 유형으로 절세 전략 및 예산 재조정이 필요합니다.",
+    "자산의존형": "🏦 연금보다는 자산에 의존도가 높으며, 자산 관리 전략이 중요합니다.",
+    "연금의존형": "📥 자산보다 연금에 의존하는 경향이 강한 유형입니다.",
+}
+DEFAULT_DISPLAY_TYPE = "균형형"
 
 def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
-    fin_type = fin_type if fin_type in TYPE_DESCRIPTIONS else DEFAULT_TYPE
-    desc = TYPE_DESCRIPTIONS[fin_type]
+    # 1) TabNet 유형 우선
+    if display_type in TABNET_TYPE_DESCRIPTIONS:
+        title = display_type
+        desc  = TABNET_TYPE_DESCRIPTIONS[display_type]
+    # 2) 아니면 투자성향 설명
+    elif display_type in RISK_STYLE_DESCRIPTIONS:
+        title = display_type
+        desc  = RISK_STYLE_DESCRIPTIONS[display_type]
+    else:
+        title = DEFAULT_DISPLAY_TYPE
+        desc  = TABNET_TYPE_DESCRIPTIONS.get(DEFAULT_DISPLAY_TYPE, "")
+
 
     st.markdown("""
     <style>
@@ -488,8 +508,11 @@ if ss.flow == "survey":
             try:
                 arr = map_survey_to_model_input(answers)
                 pred = survey_model.predict(arr)
-                label = survey_encoder.inverse_transform(pred)[0]
-                ss.pred_label = label  # 🔸 예측된 금융 유형 저장
+                tabnet_label = survey_encoder.inverse_transform(pred)[0].strip()
+                
+                st.session_state["tabnet_label"] = tabnet_label     # ✅ 금융유형(표시용)
+                st.session_state["pred_label"]   = tabnet_label     # (과거 코드 호환용)
+                st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
 
                 proba_method = getattr(survey_model, "predict_proba", None)
                 if callable(proba_method):
@@ -526,8 +549,9 @@ if ss.flow == "recommend":
             st.warning(rec_df.iloc[0, 0])
         else:
             # 스케치 스타일 결과 화면 렌더
-            fin_type = st.session_state.get("pred_label") or risk_choice or "안정형"
-            render_final_screen(fin_type, rec_df)
+            display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE  # ✅ TabNet 결과만
+
+            render_final_screen(display_type, rec_df)
 
             st.session_state["rec_df"] = rec_df
             st.session_state["fin_type"] = fin_type
