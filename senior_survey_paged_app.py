@@ -606,6 +606,9 @@ elif ss.flow == "survey":
 elif ss.flow == "result":
     render_type_result()
 elif ss.flow == "recommend":
+    user_pref = ss.answers
+    rec_df = recommend_fallback_split(user_pref)
+    render_recommend(rec_df)
     st.markdown("---")
     st.subheader("🧲 금융상품 추천")
     
