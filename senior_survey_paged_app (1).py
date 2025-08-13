@@ -573,24 +573,22 @@ if ss.flow == "recommend":
             
             
             # -------------------------------------------------
-            # [UPDATED] 시뮬레이션 가정값(%) 슬라이더 + 추천 상품별 비교 그래프
+            # [FORM VERSION] 시뮬레이션 가정값(%) 입력 → "시뮬레이션 실행" 시에만 계산/그래프 갱신
             #   - 물가: 0~8% (기본 3%)
             #   - 기본 수익률: 0~6% (기본 2%)
-            #   - 상품 수익률 조정: 0~20% (기본 = 추천값)
+            #   - 상품 수익률은 추천값 사용(탭에서 별도 조정 없이 비교 그래프만 표시)
             # -------------------------------------------------
             if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
             
-                # 1) 가정값(%) 슬라이더 — % 단위로 받아서 내부에서 /100.0으로 변환
                 st.markdown("### ⚙️ 시뮬레이션 가정값")
-                colA, colB = st.columns(2)
-                with colA:
-                    inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1)
-                with colB:
-                    base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1)
+                with st.form("sim_form"):
+                    colA, colB = st.columns(2)
+                    with colA:
+                        inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1, key="inflation_pct_form")
+                    with colB:
+                        base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1, key="base_return_pct_form")
             
-                # 소수로 변환(예: 3.0% -> 0.03)
-                inflation = inflation_pct / 100.0
-                base_return = base_return_pct / 100.0
+                    submitted = st.form_submit_button("시뮬레이션 실행")
             
                 # 설문 기반 입력값(없으면 안전한 기본값)
                 ans = st.session_state.get("answers", {})
@@ -602,58 +600,67 @@ if ss.flow == "recommend":
                 monthly_income  = pension_month + income_month
                 monthly_expense = float(ans.get("living_cost", 130))
             
-                # 기본 시나리오(슬라이더 반영) — 탭 공용으로 한 번만 계산
-                log_base, _ = retirement_simulation(
-                    current_age, end_age, current_assets, monthly_income, monthly_expense,
-                    inflation_rate=inflation, investment_return=base_return
-                )
-                df_b = (pd.DataFrame(log_base)[['나이', '잔액']].rename(columns={'잔액': '기본 시나리오'})
-                        if log_base else pd.DataFrame())
+                # 제출되었을 때만 계산
+                if submitted:
+                    # 입력 저장(필요 시 재사용)
+                    st.session_state["sim_inputs"] = {
+                        "inflation_pct": inflation_pct,
+                        "base_return_pct": base_return_pct
+                    }
             
-                # 2) 상품별 탭
-                st.markdown("### 📈 추천 상품별 적용 시나리오")
-                rec_records = rec_df.to_dict(orient="records")
-                tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+                    # 소수로 변환
+                    inflation = inflation_pct / 100.0
+                    base_return = base_return_pct / 100.0
             
-                for tab, r in zip(tabs, rec_records):
-                    with tab:
-                        # (a) 추천값에서 상품 수익률(%) 확보: 숫자형(0.05) 우선, 없으면 '5.1%' 파싱
-                        if '예상수익률' in r and r['예상수익률'] is not None:
-                            prod_return_pct_default = float(r['예상수익률']) * 100.0   # 0.051 -> 5.1
-                        else:
-                            txt = str(r.get('예상수익률(연)', '0')).replace('%','')
-                            try:
-                                prod_return_pct_default = float(txt)
-                            except:
-                                prod_return_pct_default = 5.0  # 안전한 기본값(%)
+                    # 기본 시나리오(공용) 계산
+                    log_base, _ = retirement_simulation(
+                        current_age, end_age, current_assets, monthly_income, monthly_expense,
+                        inflation_rate=inflation, investment_return=base_return
+                    )
+                    df_b = (pd.DataFrame(log_base)[['나이', '잔액']]
+                              .rename(columns={'잔액': '기본 시나리오'})
+                            ) if log_base else pd.DataFrame()
             
-                        # (b) 필요 시 해당 상품 수익률(%) 직접 조정
-                        use_custom = st.checkbox("이 상품 수익률 직접 조정하기", key=f"adj_{r.get('상품명','')}")
-                        if use_custom:
-                            prod_return_pct = st.slider("해당 상품 수익률(연, %)", 0.0, 20.0, float(prod_return_pct_default), 0.1)
-                        else:
-                            prod_return_pct = float(prod_return_pct_default)
+                    # 상품별 탭: 각 상품 수익률(추천값) vs 기본 시나리오 비교
+                    st.markdown("### 📈 추천 상품별 적용 시나리오")
+                    rec_records = rec_df.to_dict(orient="records")
+                    tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
             
-                        # 소수로 변환
-                        prod_return = prod_return_pct / 100.0
+                    for tab, r in zip(tabs, rec_records):
+                        with tab:
+                            # 추천 수익률(%): 숫자(0.05) 우선, 없으면 '5.1%' 파싱
+                            if '예상수익률' in r and r['예상수익률'] is not None:
+                                prod_return_pct = float(r['예상수익률']) * 100.0
+                            else:
+                                txt = str(r.get('예상수익률(연)', '0')).replace('%','')
+                                try:
+                                    prod_return_pct = float(txt)
+                                except:
+                                    prod_return_pct = 5.0  # 안전 기본
             
-                        # (c) 상품 적용 시나리오(슬라이더 반영)
-                        log_prod, _ = retirement_simulation(
-                            current_age, end_age, current_assets, monthly_income, monthly_expense,
-                            inflation_rate=inflation, investment_return=prod_return
-                        )
-                        df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+                            prod_return = prod_return_pct / 100.0
             
-                        # (d) 비교 그래프 (내장 차트만 사용)
-                        st.caption(
-                            f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
-                            f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
-                        )
-                        chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
-                                    if not df_b.empty else df_p.set_index('나이'))
-                        st.line_chart(chart_df)
+                            # 상품 적용 시나리오(폼 입력 가정값 반영)
+                            log_prod, _ = retirement_simulation(
+                                current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                inflation_rate=inflation, investment_return=prod_return
+                            )
+                            df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+            
+                            # 비교 그래프 (기본 vs 해당 상품)
+                            st.caption(
+                                f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
+                                f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
+                            )
+                            chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                                        if not df_b.empty else df_p.set_index('나이'))
+                            st.line_chart(chart_df)
+            
+                else:
+                    st.info("위의 가정값을 설정한 뒤 **시뮬레이션 실행**을 눌러 그래프를 확인하세요.")
             else:
                 st.info("추천 상품별 시나리오를 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
+
 
 
             # CSV 다운로드
