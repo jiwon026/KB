@@ -195,13 +195,11 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     out = df.copy()
     out['월예상수익금(만원)'] = (out['예상수익률'].astype(float) * user['투자금액'] / 12.0).round(1)
     out['투자기간(개월)'] = out['권장투자기간'].astype(int)
-
-    # ⬇️ 숫자형 그대로 보존 + 보기용 문자열 컬럼 따로
-    out['예상수익률'] = out['예상수익률'].astype(float)             # ← 숫자(0.05 같은 소수)
+    out['예상수익률'] = out['예상수익률'].astype(float)  # <- 숫자 보존 (0.05)
     out['예상수익률(연)'] = (out['예상수익률'] * 100).round(2).astype(str) + '%'
-
     cols = ['구분','상품명','월예상수익금(만원)','예상수익률','예상수익률(연)','리스크','투자기간(개월)']
     return out[cols]
+
 
 def recommend_fallback_split(user: dict) -> pd.DataFrame:
     """CSV 두 개(예·적금/펀드)로 즉시 구축: 예·적금 2 + 펀드 1"""
