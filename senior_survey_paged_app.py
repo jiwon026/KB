@@ -565,33 +565,44 @@ elif ss.flow == "survey":
         lock_inferred=LOCK_INFERRED_FIELDS
     )
 
+    # 제출 처리
     if submitted:
         if (survey_model is None) or (survey_encoder is None):
-            st.info("분류 모델이 없어 설문 결과만 저장하고 추천 단계로 넘어갈게요.")
+            st.info("분류 모델이 없어 설문 결과만 저장하고 결과 화면으로 이동합니다.")
             ss.pred_label = answers.get("risk") or "안정형"
             ss.answers = answers
-            ss.flow = "result"  # 설문 완료 → 결과 화면
+            ss.flow = "result"
         else:
             try:
                 arr = map_survey_to_model_input(answers)
                 pred = survey_model.predict(arr)
                 tabnet_label = survey_encoder.inverse_transform(pred)[0].strip()
-
                 st.session_state["tabnet_label"] = tabnet_label
-                st.session_state["pred_label"]   = tabnet_label  # (호환용)
+                st.session_state["pred_label"]   = tabnet_label
                 ss.answers = answers
-
-                # 확률표시(선택)
                 proba_method = getattr(survey_model, "predict_proba", None)
                 if callable(proba_method):
                     proba = proba_method(arr)
                     proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
                     st.bar_chart(proba_df.T)
-
                 st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
                 ss.flow = "result"
             except Exception as e:
                 st.error(f"오류 발생: {e}")
+
+    # 🔽 폼 ‘밖’에 보조 네비게이션 버튼들 (제출과 독립적)
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("메인으로", key="survey_nav_main"):
+            ss.flow = "main"
+    with col2:
+        if st.button("추천으로", key="survey_nav_reco"):
+            # 설문 미제출이어도 이동 허용 (필요 시 tabnet_label 체크해서 survey로 돌려보내도 됨)
+            ss.flow = "recommend"
+    with col3:
+        if st.button("시뮬레이션으로", key="survey_nav_sim"):
+            ss.flow = "recommend"  # 추천 화면 하단의 시뮬레이션 섹션에서 보이도록
 elif ss.flow == "result":
     render_type_result()
 elif ss.flow == "recommend":
