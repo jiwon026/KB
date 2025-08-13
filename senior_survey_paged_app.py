@@ -516,24 +516,30 @@ def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
     st.subheader("📝 설문")
     answers = {}
     defaults = defaults or {}
+    with st.form("survey_form"):
 
-    # 기본값을 세션키에 심어줌(최초 1회)
-    def _seed_default(key, value):
-        skey = f"q_{key}"
-        if (skey not in st.session_state) and (value is not None):
-            st.session_state[skey] = value
-
-    _seed_default("income",  defaults.get("income"))
-    _seed_default("pension", defaults.get("pension"))
-
-    for q in QUESTIONS:
-        title, kind, key = q[0], q[1], q[2]
-        disabled = lock_inferred and (key in defaults)
-
-        if kind == "number":
-            answers[key] = st.number_input(title, min_value=0, step=1, key=f"q_{key}", disabled=disabled)
-        elif kind == "select":
-            answers[key] = st.selectbox(title, q[3], key=f"q_{key}", disabled=disabled)
+        def SURVEY_KEY_FN(k: str) -> str:
+            return f"survey_{k}"  # ← 설문 전용 프리픽스
+    
+        # 기본값을 세션키에 심어줌(최초 1회)
+        def _seed_default(key, value):
+            skey = SURVEY_KEY_FN(key)
+            if (skey not in st.session_state) and (value is not None):
+                st.session_state[skey] = value
+    
+        _seed_default("income",  defaults.get("income"))
+        _seed_default("pension", defaults.get("pension"))
+    
+        for q in QUESTIONS:
+            title, kind, key = q[0], q[1], q[2]
+            disabled = lock_inferred and (key in defaults)
+    
+            wkey = SURVEY_KEY_FN(key)  # ← 모든 위젯 key 한곳에서 통일
+            if kind == "number":
+                answers[key] = st.number_input(title, min_value=0, step=1, key=wkey, disabled=disabled)
+            elif kind == "select":
+                answers[key] = st.selectbox(title, q[3], key=wkey, disabled=disabled)
+        submitted = st.form_submit_button("유형 분류하기")
     return answers
 
 def map_survey_to_model_input(r):
@@ -579,7 +585,6 @@ elif ss.flow == "survey":
                 ss.flow = "result"     # ← 설문 끝나면 결과 화면으로 이동
             except Exception as e:
                 st.error(f"오류 발생: {e}")
-    render_survey()
 elif ss.flow == "result":
     render_type_result()
 elif ss.flow == "recommend":
