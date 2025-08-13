@@ -164,18 +164,40 @@ def preprocess_products(df: pd.DataFrame, group_name: str = "") -> pd.DataFrame:
     return out[out['상품명'] != '무명상품'].drop_duplicates(subset=['상품명']).reset_index(drop=True)
 
 def rule_based_filter(df: pd.DataFrame, user: dict) -> pd.DataFrame:
+    # 방어: user 유효성
+    if not isinstance(user, dict):
+        st.warning("내부 경고: 사용자 선호 정보가 올바르지 않습니다.")
+        return df.head(0)
+
+    # 기본값 + 타입 정리
+    risk_choice = (user.get('투자성향') or '위험중립형')
+    invest_amt  = user.get('투자금액', 0) or 0
+    invest_per  = user.get('투자기간', 0) or 0
+
+    try:
+        invest_amt = int(invest_amt)
+    except Exception:
+        invest_amt = 0
+    try:
+        invest_per = int(invest_per)
+    except Exception:
+        invest_per = 0
+
+    # 리스크 허용 매핑
     risk_pref_map = {
         '안정형': ['낮음','중간'],
         '위험중립형': ['중간','낮음','높음'],
         '공격형': ['높음','중간']
     }
-    allowed = risk_pref_map.get(user['투자성향'], ['낮음','중간','높음'])
+    allowed = risk_pref_map.get(risk_choice, ['낮음','중간','높음'])
+
     f = df[
-        (df['최소투자금액'] <= user['투자금액']) &
-        (df['권장투자기간'] <= user['투자기간']) &
+        (pd.to_numeric(df['최소투자금액'], errors='coerce').fillna(10**9) <= invest_amt) &
+        (pd.to_numeric(df['권장투자기간'], errors='coerce').fillna(10**9) <= invest_per) &
         (df['리스크'].isin(allowed))
     ]
     return f.sort_values('예상수익률', ascending=False).head(500).reset_index(drop=True)
+
 
 def _get_feature_vector(df: pd.DataFrame) -> np.ndarray:
     return np.vstack([
@@ -202,10 +224,16 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
 
 
 def recommend_fallback_split(user: dict) -> pd.DataFrame:
-    """CSV 두 개(예·적금/펀드)로 즉시 구축: 예·적금 2 + 펀드 1"""
+    # 기본키 채워 넣기 (혹시 누락되면)
+    user = {
+        '투자금액': user.get('투자금액', 0) if isinstance(user, dict) else 0,
+        '투자기간': user.get('투자기간', 0) if isinstance(user, dict) else 0,
+        '투자성향': user.get('투자성향', '위험중립형') if isinstance(user, dict) else '위험중립형',
+        '목표월이자': user.get('목표월이자', 0) if isinstance(user, dict) else 0,
+    }
+
     dep_raw = load_deposit_csv()
     fun_raw = load_fund_csv()
-
     dep = preprocess_products(dep_raw, "예·적금")
     fun = preprocess_products(fun_raw, "펀드")
 
@@ -537,18 +565,23 @@ if ss.flow == "recommend":
     target_monthly = st.number_input("목표 월이자(만원)", min_value=1, step=1, value=10)
 
     if st.button("추천 보기"):
-        user_pref = {...}
+        user_pref = {
+            '투자금액': invest_amount,
+            '투자기간': invest_period,
+            '투자성향': risk_choice,
+            '목표월이자': target_monthly
+        }
+        assert isinstance(user_pref, dict), "user_pref must be dict"  # 디버깅용(문제시 메시지 표출)
         rec_df = recommend_fallback_split(user_pref)
     
         if "메시지" in rec_df.columns:
             st.warning(rec_df.iloc[0, 0])
         else:
-            display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE  # ← TabNet만!
+            display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE
             render_final_screen(display_type, rec_df)
-    
-            # 재실행 보존
+            
             st.session_state["rec_df"] = rec_df
-            st.session_state["display_type"] = display_type   # ← fin_type 대신 display_type로 저장
+            st.session_state["display_type"] = display_type   # <- 기존 fin_type 대신
             st.session_state["show_reco"] = True
         
     # 재실행 후에도 결과 유지
@@ -575,6 +608,9 @@ if ss.flow == "recommend":
         # 전체 시나리오(보수 2% vs 위험성향 기반 수익률)
         base_return = 0.02
         invest_return = get_invest_return_from_risk(risk_choice)
+        reason_text = recommend_reason_from_simulation(
+            depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
+        )
         
         log_base, depletion_base = retirement_simulation(
             current_age, end_age, current_assets, monthly_income, monthly_expense,
