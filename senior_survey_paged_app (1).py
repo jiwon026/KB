@@ -325,18 +325,18 @@ TABNET_TYPE_DESCRIPTIONS = {
 }
 DEFAULT_DISPLAY_TYPE = "균형형"
 
-def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
-    # 1) TabNet 유형 우선
+def render_final_screen(display_type: str, rec_df: pd.DataFrame):
+    # TabNet 유형 우선 → 없으면 투자성향 → 폴백
     if display_type in TABNET_TYPE_DESCRIPTIONS:
         title = display_type
         desc  = TABNET_TYPE_DESCRIPTIONS[display_type]
-    # 2) 아니면 투자성향 설명
     elif display_type in RISK_STYLE_DESCRIPTIONS:
         title = display_type
         desc  = RISK_STYLE_DESCRIPTIONS[display_type]
     else:
         title = DEFAULT_DISPLAY_TYPE
         desc  = TABNET_TYPE_DESCRIPTIONS.get(DEFAULT_DISPLAY_TYPE, "")
+
 
 
     st.markdown("""
@@ -360,7 +360,7 @@ def render_final_screen(fin_type: str, rec_df: pd.DataFrame):
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f'<div class="hero">{fin_type}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero">{title}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
 
     colors = ["b1", "b2", "b3"]
@@ -519,9 +519,8 @@ if ss.flow == "survey":
                     proba = proba_method(arr)
                     proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
                     st.bar_chart(proba_df.T)
-                    st.success(f"🧾 예측된 금융 유형: **{label}**")
                 else:
-                    st.success(f"🧾 예측된 금융 유형: **{label}**")
+                    pass
             except Exception as e:
                 st.exception(e)
             ss.answers = answers
@@ -538,31 +537,25 @@ if ss.flow == "recommend":
     target_monthly = st.number_input("목표 월이자(만원)", min_value=1, step=1, value=10)
 
     if st.button("추천 보기"):
-        user_pref = {
-            '투자금액': invest_amount,
-            '투자기간': invest_period,
-            '투자성향': risk_choice,
-            '목표월이자': target_monthly
-        }
-        rec_df = recommend_fallback_split(user_pref)  # 저장 인덱스 없이도 동작
+        user_pref = {...}
+        rec_df = recommend_fallback_split(user_pref)
+    
         if "메시지" in rec_df.columns:
             st.warning(rec_df.iloc[0, 0])
         else:
-            # 스케치 스타일 결과 화면 렌더
-            display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE  # ✅ TabNet 결과만
-
+            display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE  # ← TabNet만!
             render_final_screen(display_type, rec_df)
-
+    
+            # 재실행 보존
             st.session_state["rec_df"] = rec_df
-            st.session_state["fin_type"] = fin_type
+            st.session_state["display_type"] = display_type   # ← fin_type 대신 display_type로 저장
             st.session_state["show_reco"] = True
+        
     # 재실행 후에도 결과 유지
     if st.session_state.get("show_reco") and ("rec_df" in st.session_state):
         rec_df = st.session_state["rec_df"]
-        fin_type = st.session_state.get("fin_type") or risk_choice or "안정형"
-        # 여기서 render_final_screen(fin_type, rec_df) 호출
-        render_final_screen(fin_type, rec_df)
-        # 아래에 “시뮬레이션 폼 + 상품별 그래프” 블록이 이어지도록 배치
+        display_type = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
+        render_final_screen(display_type, rec_df)
 
 
             
@@ -581,7 +574,7 @@ if ss.flow == "recommend":
         
         # 전체 시나리오(보수 2% vs 위험성향 기반 수익률)
         base_return = 0.02
-        invest_return = get_invest_return_from_risk(fin_type or risk_choice)
+        invest_return = get_invest_return_from_risk(risk_choice)
         
         log_base, depletion_base = retirement_simulation(
             current_age, end_age, current_assets, monthly_income, monthly_expense,
@@ -594,7 +587,7 @@ if ss.flow == "recommend":
         
         # 추천 근거 (유형 설명 밑)
         reason_text = recommend_reason_from_simulation(
-            depletion_base, current_age, current_assets, monthly_income, monthly_expense, fin_type
+            depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
         )
         st.info(f"🔎 추천 근거: {reason_text}")
         
@@ -712,9 +705,9 @@ if ss.flow == "recommend":
 
 
 
-            # CSV 다운로드
-            csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+        # CSV 다운로드
+        csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
 
     if st.button("처음으로 돌아가기"):
         for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label"]:
