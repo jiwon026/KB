@@ -608,7 +608,6 @@ elif ss.flow == "result":
 elif ss.flow == "recommend":
     user_pref = ss.answers
     rec_df = recommend_fallback_split(user_pref)
-    render_recommend(rec_df)
     st.markdown("---")
     st.subheader("🧲 금융상품 추천")
     
@@ -679,11 +678,6 @@ elif ss.flow == "recommend":
             invest_return=invest_return
         )
         
-        reason_text = recommend_reason_from_simulation(
-            depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
-        )
-    
-        # ---- 추천 근거 & 지표 ----
         reason_text = recommend_reason_from_simulation(
             depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
         )
@@ -778,7 +772,7 @@ elif ss.flow == "recommend":
         for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label"]:
             if k in st.session_state: del st.session_state[k]
         st.rerun()
-    render_recommend()
+
 elif ss.flow == "predict":
     st.subheader("📈 연금 계산기")
     income = st.number_input("평균 월소득(만원)", min_value=0, step=1, key="pred_income")
@@ -816,4 +810,3 @@ elif ss.flow == "predict":
                 st.exception(e)
 
         ss.flow = "survey"
-    render_predict_page()
