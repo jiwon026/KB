@@ -540,7 +540,7 @@ def render_survey(defaults: dict | None = None, lock_inferred: bool = False):
             elif kind == "select":
                 answers[key] = st.selectbox(title, q[3], key=wkey, disabled=disabled)
         submitted = st.form_submit_button("유형 분류하기")
-    return answers
+    return answers, submitted
 
 def map_survey_to_model_input(r):
     gender = 0 if r["gender"] == "남성" else 1
