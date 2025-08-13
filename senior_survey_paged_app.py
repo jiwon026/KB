@@ -632,7 +632,8 @@ elif ss.flow == "recommend":
             st.session_state["display_type"]  = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE
             st.session_state["risk_choice"]   = risk_choice
             st.session_state["show_reco"]     = True
-            # 시뮬레이션 상태 리셋
+            # 🔽 시뮬레이션 상태 초기화
+            st.session_state["show_sim"]   = False
             st.session_state.pop("sim_ready", None)
             st.session_state.pop("sim_inputs", None)
             st.rerun()
@@ -643,10 +644,10 @@ elif ss.flow == "recommend":
         display_type = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
         risk_choice  = st.session_state.get("risk_choice", "위험중립형")
 
-        # 3-1) 상단 카드 (단일 호출)
+        # 3-1) 상단 카드
         render_final_screen(display_type, rec_df)
-
-        # 3-2) 설문 기반 입력값 복원
+        
+        # 3-2) 시나리오 계산에 필요한 값 (계산은 해두되, 표시 여부는 아래에서 토글)
         ans = st.session_state.get("answers", {})
         current_age     = int(ans.get("age", 67))
         end_age         = 100
@@ -655,11 +656,9 @@ elif ss.flow == "recommend":
         income_month    = float(ans.get("income", 0))
         monthly_income  = pension_month + income_month
         monthly_expense = float(ans.get("living_cost", 130))
-
-        # 3-3) 기본/투자 시나리오 계산 + 지표
+        
         base_return   = 0.02
         invest_return = get_invest_return_from_risk(risk_choice)
-
         log_base, depletion_base = retirement_simulation(
             current_age=current_age,
             end_age=end_age,
@@ -669,97 +668,113 @@ elif ss.flow == "recommend":
             inflation_rate=0.03,
             investment_return=base_return
         )
-        log_invest, depletion_invest = simulate_with_financial_product(
-            current_age=current_age,
-            end_age=end_age,
-            current_assets=current_assets,
-            monthly_income=monthly_income,
-            monthly_expense=monthly_expense,
-            invest_return=invest_return
-        )
-
         reason_text = recommend_reason_from_simulation(
             depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
         )
         st.info(f"🔎 추천 근거: {reason_text}")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric(f"기본 시나리오(연 {int(base_return*100)}%) 고갈 나이",
-                      value=f"{depletion_base}세" if depletion_base else "고갈 없음")
-        with col2:
-            st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
-                      value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
-
-        # 3-4) 시뮬레이션 가정값 폼 (제출 시에만 그래프 계산)
-        if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
-            st.markdown("### ⚙️ 시뮬레이션 가정값")
-            with st.form("sim_form"):
-                colA, colB = st.columns(2)
-                with colA:
-                    inflation_pct = st.slider(
-                        "물가상승률(연, %)", 0.0, 8.0,
-                        float(st.session_state.get("sim_inputs", {}).get("inflation_pct", 3.0)),
-                        0.1, key="inflation_pct_form"
-                    )
-                with colB:
-                    base_return_pct = st.slider(
-                        "기본 시나리오 수익률(연, %)", 0.0, 6.0,
-                        float(st.session_state.get("sim_inputs", {}).get("base_return_pct", 2.0)),
-                        0.1, key="base_return_pct_form"
-                    )
-                submitted = st.form_submit_button("시뮬레이션 실행")
-
-            if submitted:
-                st.session_state["sim_inputs"] = {
-                    "inflation_pct": float(inflation_pct),
-                    "base_return_pct": float(base_return_pct)
-                }
-                st.session_state["sim_ready"] = True
+        
+        # 🔽 여기서 '노후 시뮬레이션 보기' 버튼으로 토글
+        if not st.session_state.get("show_sim"):
+            if st.button("📈 노후 시뮬레이션 보기", key="btn_show_sim"):
+                st.session_state["show_sim"] = True
                 st.rerun()
-
-            if st.session_state.get("sim_ready"):
-                sim_inputs = st.session_state.get("sim_inputs", {"inflation_pct": 3.0, "base_return_pct": 2.0})
-                inflation  = float(sim_inputs["inflation_pct"]) / 100.0
-                base_r     = float(sim_inputs["base_return_pct"]) / 100.0
-
-                # 기본 시나리오(공용)
-                log_base2, _ = retirement_simulation(
-                    current_age, end_age, current_assets, monthly_income, monthly_expense,
-                    inflation_rate=inflation, investment_return=base_r
-                )
-                df_b = (pd.DataFrame(log_base2)[['나이','잔액']]
-                        .rename(columns={'잔액':'기본 시나리오'}) if log_base2 else pd.DataFrame())
-
-                # 상품별 탭 비교 그래프
-                st.markdown("### 📈 추천 상품별 적용 시나리오")
-                rec_records = rec_df.to_dict(orient="records")
-                tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
-
-                for tab, r in zip(tabs, rec_records):
-                    with tab:
-                        if '예상수익률' in r and pd.notnull(r['예상수익률']):
-                            prod_return_pct = float(r['예상수익률']) * 100.0
-                        else:
-                            txt = str(r.get('예상수익률(연)','0')).replace('%','')
-                            try: prod_return_pct = float(txt)
-                            except: prod_return_pct = 5.0
-                        prod_r = prod_return_pct / 100.0
-
-                        log_prod2, _ = retirement_simulation(
-                            current_age, end_age, current_assets, monthly_income, monthly_expense,
-                            inflation_rate=inflation, investment_return=prod_r
-                        )
-                        df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
-                        st.caption(
-                            f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
-                            f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{(inflation*100):.1f}%**"
-                        )
-                        chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
-                                    if not df_b.empty else df_p.set_index('나이'))
-                        st.line_chart(chart_df)
         else:
-            st.info("추천 상품별 시나리오를 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
+            if st.button("접기", key="btn_hide_sim"):
+                st.session_state["show_sim"] = False
+                st.rerun()
+        
+        # 🔽 시뮬레이션 섹션: 토글 ON일 때만 노출
+        if st.session_state.get("show_sim"):
+        
+            # 지표
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(f"기본 시나리오(연 {int(base_return*100)}%) 고갈 나이",
+                          value=f"{depletion_base}세" if depletion_base else "고갈 없음")
+            # 투자 시나리오(초깃값만 계산, 상세 그래프는 폼 제출 시 계산)
+            log_invest, depletion_invest = simulate_with_financial_product(
+                current_age=current_age,
+                end_age=end_age,
+                current_assets=current_assets,
+                monthly_income=monthly_income,
+                monthly_expense=monthly_expense,
+                invest_return=invest_return
+            )
+            with col2:
+                st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
+                          value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
+        
+            # 가정값 폼 → 제출 시에만 그래프 계산
+            if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
+                st.markdown("### ⚙️ 시뮬레이션 가정값")
+                with st.form("sim_form"):
+                    colA, colB = st.columns(2)
+                    with colA:
+                        inflation_pct = st.slider(
+                            "물가상승률(연, %)", 0.0, 8.0,
+                            float(st.session_state.get("sim_inputs", {}).get("inflation_pct", 3.0)),
+                            0.1, key="inflation_pct_form"
+                        )
+                    with colB:
+                        base_return_pct = st.slider(
+                            "기본 시나리오 수익률(연, %)", 0.0, 6.0,
+                            float(st.session_state.get("sim_inputs", {}).get("base_return_pct", 2.0)),
+                            0.1, key="base_return_pct_form"
+                        )
+                    submitted = st.form_submit_button("시뮬레이션 실행")
+        
+                if submitted:
+                    st.session_state["sim_inputs"] = {
+                        "inflation_pct": float(inflation_pct),
+                        "base_return_pct": float(base_return_pct)
+                    }
+                    st.session_state["sim_ready"] = True
+                    st.rerun()
+        
+                if st.session_state.get("sim_ready"):
+                    sim_inputs = st.session_state.get("sim_inputs", {"inflation_pct": 3.0, "base_return_pct": 2.0})
+                    inflation  = float(sim_inputs["inflation_pct"]) / 100.0
+                    base_r     = float(sim_inputs["base_return_pct"]) / 100.0
+        
+                    # 기본 시나리오(공용)
+                    log_base2, _ = retirement_simulation(
+                        current_age, end_age, current_assets, monthly_income, monthly_expense,
+                        inflation_rate=inflation, investment_return=base_r
+                    )
+                    df_b = (pd.DataFrame(log_base2)[['나이','잔액']]
+                            .rename(columns={'잔액':'기본 시나리오'}) if log_base2 else pd.DataFrame())
+        
+                    # 상품별 탭 비교 그래프
+                    st.markdown("### 📈 추천 상품별 적용 시나리오")
+                    rec_records = rec_df.to_dict(orient="records")
+                    tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+        
+                    for tab, r in zip(tabs, rec_records):
+                        with tab:
+                            if '예상수익률' in r and pd.notnull(r['예상수익률']):
+                                prod_return_pct = float(r['예상수익률']) * 100.0
+                            else:
+                                txt = str(r.get('예상수익률(연)','0')).replace('%','')
+                                try: prod_return_pct = float(txt)
+                                except: prod_return_pct = 5.0
+                            prod_r = prod_return_pct / 100.0
+        
+                            log_prod2, _ = retirement_simulation(
+                                current_age, end_age, current_assets, monthly_income, monthly_expense,
+                                inflation_rate=inflation, investment_return=prod_r
+                            )
+                            df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(
+                                columns={'잔액': f"{r.get('상품명','-')} 적용"}
+                            )
+                            st.caption(
+                                f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
+                                f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{(inflation*100):.1f}%**"
+                            )
+                            chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                                        if not df_b.empty else df_p.set_index('나이'))
+                            st.line_chart(chart_df)
+            else:
+                st.info("추천 상품별 시나리오를 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
 
         # 3-5) 다운로드
         csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
