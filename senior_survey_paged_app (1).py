@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import joblib
-import matplotlib.pyplot as plt
 
 # (FAISS 있으면 사용, 없으면 sklearn으로 대체)
 USE_FAISS = True
@@ -237,7 +236,7 @@ def recommend_fallback_split(user: dict) -> pd.DataFrame:
     return _add_explain(out, user)
 
 # =================================
-# [NEW] 노후 시뮬레이션 유틸
+# [NEW] 노후 시뮬레이션 & 추천 근거 유틸
 # =================================
 def retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                           inflation_rate=0.03, investment_return=0.02):
@@ -272,12 +271,11 @@ def retirement_simulation(current_age, end_age, current_assets, monthly_income, 
 
 def simulate_with_financial_product(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                     invest_return=0.05):
-    return retirement_simulation(current_age, end_age, current_assets,
-                                 monthly_income, monthly_expense,
+    return retirement_simulation(current_age, end_age, current_assets, monthly_income, monthly_expense,
                                  inflation_rate=0.03, investment_return=invest_return)
 
 def get_invest_return_from_risk(risk_level: str) -> float:
-    """유형/선택 위험도를 투자수익률 가정으로 변환"""
+    """예측/선택된 위험성향을 연 수익률 가정으로 변환"""
     if risk_level in ["안정형", "안정추구형"]:
         return 0.03
     if risk_level in ["위험중립형"]:
@@ -288,7 +286,7 @@ def get_invest_return_from_risk(risk_level: str) -> float:
 
 def recommend_reason_from_simulation(depletion_age, current_age, current_assets,
                                      monthly_income, monthly_expense, risk_level: str):
-    """그래프/시뮬레이션 결과에 근거한 추천 이유 메시지"""
+    """시뮬레이션 결과 기반 간단 추천 근거 메시지"""
     surplus = monthly_income - monthly_expense
     if depletion_age:
         if surplus <= 0:
@@ -296,10 +294,11 @@ def recommend_reason_from_simulation(depletion_age, current_age, current_assets,
         if current_assets < 10000:
             return f"{depletion_age}세 자산 고갈 위험 · 절세형/분산형 상품으로 수익률 제고가 필요합니다."
         return f"{depletion_age}세 자산 고갈 위험 · 위험도('{risk_level}')에 맞는 수익원 다변화가 필요합니다."
-    # 고갈 없을 때
+    # 고갈 없음
     if current_assets >= 20000 and surplus > 0:
         return f"자산/현금흐름이 양호합니다 · '{risk_level}'에 맞춘 분산투자로 실질가치(물가 3%) 방어를 권장합니다."
     return "지출 구조를 점검하고 비과세/저비용 상품으로 실질 수익률을 높이세요."
+
 
 
 # =================================
@@ -529,9 +528,9 @@ if ss.flow == "recommend":
             render_final_screen(fin_type, rec_df)
 
             # =================================
-            # [NEW] 시뮬레이션 & 근거 출력
+            # [NEW] 시뮬레이션 & 근거 + 지표 + 그래프
             # =================================
-            # 설문 응답에서 시뮬레이션 입력 추출 (가능하면 설문 기반으로)
+            # 설문 기반 입력값(없으면 안전한 기본값 사용)
             ans = st.session_state.get("answers", {})
             current_age     = int(ans.get("age", 67))
             end_age         = 100
@@ -541,7 +540,7 @@ if ss.flow == "recommend":
             monthly_income  = pension_month + income_month
             monthly_expense = float(ans.get("living_cost", 130))
             
-            # 기본(보수적) vs 금융상품 적용(위험도 기반) 시나리오
+            # 전체 시나리오(보수 2% vs 위험성향 기반 수익률)
             base_return = 0.02
             invest_return = get_invest_return_from_risk(fin_type or risk_choice)
             
@@ -554,40 +553,72 @@ if ss.flow == "recommend":
                 invest_return=invest_return
             )
             
-            # 추천 이유(유형 설명 밑) 출력
+            # 추천 근거 (유형 설명 밑)
             reason_text = recommend_reason_from_simulation(
                 depletion_base, current_age, current_assets, monthly_income, monthly_expense, fin_type
             )
             st.info(f"🔎 추천 근거: {reason_text}")
             
-            # 고갈 나이 표시
+            # 고갈 나이 지표
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("기본 시나리오(연 {0:.0f}%) 고갈 나이".format(base_return*100),
+                st.metric(f"기본 시나리오(연 {int(base_return*100)}%) 고갈 나이",
                           value=f"{depletion_base}세" if depletion_base else "고갈 없음")
             with col2:
-                st.metric("금융상품 적용(연 {0:.0f}%) 고갈 나이".format(invest_return*100),
+                st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
                           value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
             
-            # 그래프 (카드 아래 표시)
-            df_base = pd.DataFrame(log_base)
-            df_invest = pd.DataFrame(log_invest)
+            # 전체 비교 그래프 (streamlit 내장)
+            df_base = pd.DataFrame(log_base)[['나이', '잔액']] if log_base else pd.DataFrame(columns=['나이','잔액'])
+            df_invest = pd.DataFrame(log_invest)[['나이', '잔액']] if log_invest else pd.DataFrame(columns=['나이','잔액'])
             
-            if not df_base.empty and not df_invest.empty:
-                df_base = df_base[['나이', '잔액']].rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'})
-                df_invest = df_invest[['나이', '잔액']].rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'})
-                chart_df = pd.merge(df_base, df_invest, on='나이', how='outer').set_index('나이')
+            if not df_base.empty or not df_invest.empty:
+                st.markdown("#### 📊 자산 잔액 시나리오 비교")
+                if not df_base.empty and not df_invest.empty:
+                    df_base = df_base.rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'})
+                    df_invest = df_invest.rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'})
+                    chart_df = pd.merge(df_base, df_invest, on='나이', how='outer').set_index('나이')
+                    st.line_chart(chart_df)
+                elif not df_base.empty:
+                    st.line_chart(df_base.rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'}).set_index('나이'))
+                elif not df_invest.empty:
+                    st.line_chart(df_invest.rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'}).set_index('나이'))
             
-                st.markdown("#### 📊 자산 잔액 시나리오 비교")
-                st.line_chart(chart_df)
-            elif not df_base.empty:
-                df_base = df_base[['나이', '잔액']].rename(columns={'잔액': f'기본 시나리오 ({int(base_return*100)}%)'}).set_index('나이')
-                st.markdown("#### 📊 자산 잔액 시나리오 비교")
-                st.line_chart(df_base)
-            elif not df_invest.empty:
-                df_invest = df_invest[['나이', '잔액']].rename(columns={'잔액': f'금융상품 적용 ({int(invest_return*100)}%)'}).set_index('나이')
-                st.markdown("#### 📊 자산 잔액 시나리오 비교")
-                st.line_chart(df_invest)
+            # -------------------------------------------------
+            # [NEW] 각 추천 상품별 적용 시나리오 탭
+            # -------------------------------------------------
+            if ("상품명" in rec_df.columns) and ("예상수익률" in rec_df.columns):
+                st.markdown("### 📈 추천 상품별 적용 시나리오")
+                rec_records = rec_df.to_dict(orient="records")
+                tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+            
+                for tab, r in zip(tabs, rec_records):
+                    with tab:
+                        # 연 수익률(소수) 보정
+                        try:
+                            prod_return = float(str(r.get("예상수익률", 0)).replace("%",""))  # 혹시 문자열이면 숫자만
+                            prod_return = prod_return/100.0 if prod_return > 1 else prod_return
+                        except:
+                            prod_return = invest_return
+            
+                        # 시나리오: 기본 2% vs 해당 상품 수익률
+                        log_prod, _ = retirement_simulation(
+                            current_age, end_age, current_assets, monthly_income, monthly_expense,
+                            inflation_rate=0.03, investment_return=prod_return
+                        )
+            
+                        df_b = pd.DataFrame(log_base)[['나이', '잔액']].rename(columns={'잔액': '기본 시나리오'}) if log_base else pd.DataFrame()
+                        df_p = pd.DataFrame(log_prod)[['나이', '잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+            
+                        if not df_b.empty:
+                            chart_df = pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                        else:
+                            chart_df = df_p.set_index('나이')
+            
+                        st.caption(f"가정 수익률: 기본 **{int(base_return*100)}%**, 해당 상품 **{round(prod_return*100,1)}%**")
+                        st.line_chart(chart_df)
+            else:
+                st.info("추천 상품별 시뮬레이션을 표시하려면 '상품명'과 '예상수익률' 컬럼이 필요합니다.")
 
             # CSV 다운로드
             csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
