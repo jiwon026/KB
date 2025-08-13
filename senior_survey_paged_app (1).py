@@ -558,12 +558,12 @@ if ss.flow == "survey":
 if ss.flow == "recommend":
     st.markdown("---")
     st.subheader("🧲 금융상품 추천")
-
+    
     invest_amount  = st.number_input("투자금액(만원)", min_value=10, step=10, value=500)
     invest_period  = st.selectbox("투자기간(개월)", [6, 12, 24, 36], index=1)
     risk_choice    = st.selectbox("리스크 허용도", ["안정형", "위험중립형", "공격형"], index=1)
     target_monthly = st.number_input("목표 월이자(만원)", min_value=1, step=1, value=10)
-
+    
     if st.button("추천 보기"):
         user_pref = {
             '투자금액': invest_amount,
@@ -571,31 +571,31 @@ if ss.flow == "recommend":
             '투자성향': risk_choice,
             '목표월이자': target_monthly
         }
-        assert isinstance(user_pref, dict), "user_pref must be dict"  # 디버깅용(문제시 메시지 표출)
         rec_df = recommend_fallback_split(user_pref)
     
         if "메시지" in rec_df.columns:
             st.warning(rec_df.iloc[0, 0])
         else:
+            # 화면 표시용 금융유형(= TabNet)
             display_type = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE
             render_final_screen(display_type, rec_df)
-            
-            st.session_state["rec_df"] = rec_df
-            st.session_state["display_type"] = display_type   # <- 기존 fin_type 대신
-            st.session_state["show_reco"] = True
-        
-    # 재실행 후에도 결과 유지
+    
+            # ✅ 재실행 보존
+            st.session_state["rec_df"]        = rec_df
+            st.session_state["display_type"]  = display_type
+            st.session_state["risk_choice"]   = risk_choice
+            st.session_state["show_reco"]     = True
+    
+    # ===== 재실행 후에도 결과 유지 / 시뮬레이션 & 그래프 =====
     if st.session_state.get("show_reco") and ("rec_df" in st.session_state):
-        rec_df = st.session_state["rec_df"]
-        display_type = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
+        rec_df        = st.session_state["rec_df"]
+        display_type  = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
+        risk_choice   = st.session_state.get("risk_choice", "위험중립형")
+    
+        # 상단 카드/설명
         render_final_screen(display_type, rec_df)
-
-
-            
-        # =================================
-        # [NEW] 시뮬레이션 & 근거 + 지표 + 그래프
-        # =================================
-        # 설문 기반 입력값(없으면 안전한 기본값 사용)
+    
+        # ---- 시뮬레이션 입력값 (설문에서 복원) ----
         ans = st.session_state.get("answers", {})
         current_age     = int(ans.get("age", 67))
         end_age         = 100
@@ -604,14 +604,11 @@ if ss.flow == "recommend":
         income_month    = float(ans.get("income", 0))
         monthly_income  = pension_month + income_month
         monthly_expense = float(ans.get("living_cost", 130))
-        
-        # 전체 시나리오(보수 2% vs 위험성향 기반 수익률)
-        base_return = 0.02
+    
+        # ---- 기본/투자 시나리오 계산 ----
+        base_return   = 0.02
         invest_return = get_invest_return_from_risk(risk_choice)
-        reason_text = recommend_reason_from_simulation(
-            depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
-        )
-        
+    
         log_base, depletion_base = retirement_simulation(
             current_age, end_age, current_assets, monthly_income, monthly_expense,
             inflation_rate=0.03, investment_return=base_return
@@ -620,14 +617,13 @@ if ss.flow == "recommend":
             current_age, end_age, current_assets, monthly_income, monthly_expense,
             invest_return=invest_return
         )
-        
-        # 추천 근거 (유형 설명 밑)
+    
+        # ---- 추천 근거 & 지표 ----
         reason_text = recommend_reason_from_simulation(
             depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_choice
         )
         st.info(f"🔎 추천 근거: {reason_text}")
-        
-        # 고갈 나이 지표
+    
         col1, col2 = st.columns(2)
         with col1:
             st.metric(f"기본 시나리오(연 {int(base_return*100)}%) 고갈 나이",
@@ -635,18 +631,9 @@ if ss.flow == "recommend":
         with col2:
             st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
                       value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
-        
-        
-        
-        # -------------------------------------------------
-        # [FORM VERSION] 시뮬레이션 가정값(%) 입력 → "시뮬레이션 실행" 시에만 계산/그래프 갱신
-        #   - 물가: 0~8% (기본 3%)
-        #   - 기본 수익률: 0~6% (기본 2%)
-        #   - 상품 수익률은 추천값 사용(탭에서 별도 조정 없이 비교 그래프만 표시)
-        # -------------------------------------------------
+    
+        # ---- 가정값 폼 → 제출 시에만 그래프 계산 ----
         if ("상품명" in rec_df.columns) and (("예상수익률" in rec_df.columns) or ("예상수익률(연)" in rec_df.columns)):
-
-            # ===== 시뮬레이션 가정값 폼 =====
             st.markdown("### ⚙️ 시뮬레이션 가정값")
             with st.form("sim_form"):
                 colA, colB = st.columns(2)
@@ -663,84 +650,61 @@ if ss.flow == "recommend":
                         0.1, key="base_return_pct_form"
                     )
                 submitted = st.form_submit_button("시뮬레이션 실행")
-        
-            # 제출 시 상태 저장
+    
             if submitted:
                 st.session_state["sim_inputs"] = {
                     "inflation_pct": float(inflation_pct),
                     "base_return_pct": float(base_return_pct)
                 }
                 st.session_state["sim_ready"] = True
-        
-            # 저장된 값이 있으면 항상 사용
-            sim_ready = st.session_state.get("sim_ready", False)
+    
+            sim_ready  = st.session_state.get("sim_ready", False)
             sim_inputs = st.session_state.get("sim_inputs", {"inflation_pct": 3.0, "base_return_pct": 2.0})
-            inflation_pct = float(sim_inputs["inflation_pct"])
-            base_return_pct = float(sim_inputs["base_return_pct"])
-            inflation = inflation_pct / 100.0
-            base_return = base_return_pct / 100.0
-        
-            if sim_ready and ("rec_df" in st.session_state):
-                rec_df = st.session_state["rec_df"]
-        
-                # 설문값 준비
-                ans = st.session_state.get("answers", {})
-                current_age     = int(ans.get("age", 67))
-                end_age         = 100
-                current_assets  = float(ans.get("assets", 9000))
-                pension_month   = float(ans.get("pension", 0))
-                income_month    = float(ans.get("income", 0))
-                monthly_income  = pension_month + income_month
-                monthly_expense = float(ans.get("living_cost", 130))
-        
+            inflation  = float(sim_inputs["inflation_pct"]) / 100.0
+            base_r     = float(sim_inputs["base_return_pct"]) / 100.0
+    
+            if sim_ready:
                 # 기본 시나리오(공용)
-                log_base, _ = retirement_simulation(
+                log_base2, _ = retirement_simulation(
                     current_age, end_age, current_assets, monthly_income, monthly_expense,
-                    inflation_rate=inflation, investment_return=base_return
+                    inflation_rate=inflation, investment_return=base_r
                 )
-                df_b = (pd.DataFrame(log_base)[['나이','잔액']]
-                        .rename(columns={'잔액':'기본 시나리오'}) if log_base else pd.DataFrame())
-        
-                # ===== 상품별 탭 비교 그래프 =====
+                df_b = (pd.DataFrame(log_base2)[['나이','잔액']]
+                        .rename(columns={'잔액':'기본 시나리오'}) if log_base2 else pd.DataFrame())
+    
+                # 상품별 탭
                 st.markdown("### 📈 추천 상품별 적용 시나리오")
                 rec_records = rec_df.to_dict(orient="records")
                 tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
-        
+    
                 for tab, r in zip(tabs, rec_records):
                     with tab:
-                        # 수익률 가져오기
-                        if '예상수익률' in r and r['예상수익률'] is not None:
+                        if '예상수익률' in r and pd.notnull(r['예상수익률']):
                             prod_return_pct = float(r['예상수익률']) * 100.0
                         else:
                             txt = str(r.get('예상수익률(연)','0')).replace('%','')
-                            try:
-                                prod_return_pct = float(txt)
-                            except:
-                                prod_return_pct = 5.0
-                        prod_return = prod_return_pct / 100.0
-        
-                        log_prod, _ = retirement_simulation(
+                            try: prod_return_pct = float(txt)
+                            except: prod_return_pct = 5.0
+                        prod_r = prod_return_pct / 100.0
+    
+                        log_prod2, _ = retirement_simulation(
                             current_age, end_age, current_assets, monthly_income, monthly_expense,
-                            inflation_rate=inflation, investment_return=prod_return
+                            inflation_rate=inflation, investment_return=prod_r
                         )
-                        df_p = pd.DataFrame(log_prod)[['나이','잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
-        
+                        df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(columns={'잔액': f"{r.get('상품명','-')} 적용"})
+    
                         st.caption(
                             f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
-                            f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
+                            f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{(inflation*100):.1f}%**"
                         )
                         chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
                                     if not df_b.empty else df_p.set_index('나이'))
                         st.line_chart(chart_df)
             else:
                 st.info("위의 가정값을 설정한 뒤 **시뮬레이션 실행**을 눌러 그래프를 확인하세요.")
-        
         else:
             st.info("추천 상품별 시나리오를 표시하려면 '상품명'과 '예상수익률' 또는 '예상수익률(연)' 컬럼이 필요합니다.")
-
-
-
-
+    
         # CSV 다운로드
         csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
