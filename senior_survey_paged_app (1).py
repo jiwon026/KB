@@ -418,7 +418,7 @@ def render_final_screen(display_type: str, rec_df: pd.DataFrame):
 st.title("💬 시니어 금융 설문 & 추천 시스템")
 
 ss = st.session_state
-ss.setdefault("flow", "choose")      # choose → predict → survey → recommend
+ss.setdefault("flow", "main")        # main → (survey/result/recommend/sim/predict)
 ss.setdefault("pred_amount", None)
 ss.setdefault("answers", {})
 ss.setdefault("prefill_survey", {})  # 예측→설문 프리필
@@ -475,14 +475,30 @@ def map_survey_to_model_input(r):
     ]])
     return arr
 
-# 1) 연금 수령 여부
-if ss.flow == "choose":
-    st.markdown("### 1️⃣ 현재 연금을 받고 계신가요?")
-    choice = st.radio("연금 수령 여부를 선택해주세요.", ["선택하세요", "예(수령 중)", "아니오(미수령)"], index=0)
-    if choice == "예(수령 중)":
-        ss.flow = "survey"
-    elif choice == "아니오(미수령)":
-        ss.flow = "predict"
+# ========== 메인 화면 ==========
+if ss.flow == "main":
+    st.title("🔎 메인")
+    st.markdown("""
+    <style>.bigbtn > div > button { height: 64px; font-size: 18px; font-weight: 800; }</style>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("내 금융유형 보기", key="btn_type", use_container_width=True):
+            # 설문이 끝나 금융유형(tabnet_label)이 있으면 결과로, 아니면 설문으로
+            ss.flow = "result" if st.session_state.get("tabnet_label") else "survey"
+        if st.button("노후 시뮬레이션", key="btn_sim_main", use_container_width=True):
+            ss.flow = "sim"
+
+    with col2:
+        if st.button("맞춤 상품 추천", key="btn_reco_main", use_container_width=True):
+            # 설문이 없으면 먼저 설문부터 가도 되고, 바로 추천으로 가도 됨
+            ss.flow = "recommend"
+        if st.button("연금 계산기(미수령자)", key="btn_predict_main", use_container_width=True):
+            ss.flow = "predict"
+
+    st.stop()  # 메인에서 렌더 끝 (아래 분기들이 실행되지 않도록)
+
 
 # 2-1) 미수령자 → 연금 계산기
 if ss.flow == "predict":
@@ -713,3 +729,73 @@ if ss.flow == "recommend":
         for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label"]:
             if k in st.session_state: del st.session_state[k]
         st.rerun()
+# ========== 노후 시뮬레이션(단독 페이지) ==========
+if ss.flow == "sim":
+    st.subheader("📈 노후 시뮬레이션")
+
+    # 설문값이 없을 수도 있으니 안전한 기본값
+    ans = st.session_state.get("answers", {})
+    current_age     = int(ans.get("age", 67))
+    end_age_default = 100
+    current_assets  = float(ans.get("assets", 9000))
+    pension_month   = float(ans.get("pension", 0))
+    income_month    = float(ans.get("income", 0))
+    monthly_income  = pension_month + income_month
+    monthly_expense = float(ans.get("living_cost", 130))
+
+    # 기본 리스크로 초기 투자수익률 제안
+    default_risk  = st.session_state.get("risk_choice") or "위험중립형"
+    default_invest_pct = 5.0 if default_risk == "위험중립형" else (3.0 if default_risk.startswith("안정") else 7.0)
+
+    with st.form("sim_only_form"):
+        colA, colB = st.columns(2)
+        with colA:
+            inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1, key="sim_only_infl")
+            base_pct      = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1, key="sim_only_base")
+        with colB:
+            invest_pct    = st.slider("투자 시나리오 수익률(연, %)", 0.0, 12.0, float(default_invest_pct), 0.1, key="sim_only_invest")
+            horizon       = st.slider("시뮬레이션 종료 나이", 80, 105, end_age_default, 1, key="sim_only_endage")
+        run = st.form_submit_button("시뮬레이션 실행")
+
+    if run:
+        end_age = int(horizon)
+        base_r  = float(base_pct)   / 100.0
+        inv_r   = float(invest_pct) / 100.0
+        infl    = float(inflation_pct) / 100.0
+
+        log_base, dep_base = retirement_simulation(
+            current_age, end_age, current_assets, monthly_income, monthly_expense,
+            inflation_rate=infl, investment_return=base_r
+        )
+        log_invest, dep_invest = retirement_simulation(
+            current_age, end_age, current_assets, monthly_income, monthly_expense,
+            inflation_rate=infl, investment_return=inv_r
+        )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric(f"기본 시나리오(연 {base_pct:.1f}%) 고갈 나이", f"{dep_base}세" if dep_base else "고갈 없음")
+        with c2:
+            st.metric(f"투자 시나리오(연 {invest_pct:.1f}%) 고갈 나이", f"{dep_invest}세" if dep_invest else "고갈 없음")
+
+        df_b = pd.DataFrame(log_base)[['나이','잔액']].rename(columns={'잔액':'기본 시나리오'})
+        df_i = pd.DataFrame(log_invest)[['나이','잔액']].rename(columns={'잔액':'투자 시나리오'})
+        chart_df = pd.merge(df_b, df_i, on='나이', how='outer').set_index('나이')
+        st.line_chart(chart_df)
+
+    st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("맞춤 추천으로", key="sim_to_reco"):
+            ss.flow = "recommend"
+            st.experimental_rerun()
+    with c2:
+        if st.button("유형 결과 보기", key="sim_to_result"):
+            ss.flow = "result" if st.session_state.get("tabnet_label") else "survey"
+            st.experimental_rerun()
+    with c3:
+        if st.button("메인으로", key="sim_to_main"):
+            ss.flow = "main"
+            st.experimental_rerun()
+
+    st.stop()  # sim 페이지에서 렌더 종료
