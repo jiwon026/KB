@@ -26,6 +26,9 @@ FUND_CSV    = "펀드_병합본.csv"          # 펀드 CSV
 # 예측→설문 프리필 값을 사용자가 수정 못 하게 잠글지 여부
 LOCK_INFERRED_FIELDS = False  # True면 자동 채운 소득/연금 칸 비활성화
 
+SHOW_PROBA_CHART = False  # 설문 예측 확률 막대차트 표시 여부
+SHOW_SUCCESS_TOAST = False  # '예측된 금융 유형' 성공 메시지 표시 여부
+
 # =================================
 # 공통 유틸 (인덱스 빌드/검색)
 # =================================
@@ -583,10 +586,11 @@ elif ss.flow == "survey":
     # 제출 처리
     if submitted:
         if (survey_model is None) or (survey_encoder is None):
-            st.info("분류 모델이 없어 설문 결과만 저장하고 결과 화면으로 이동합니다.")
+            # 모델이 없어도 설문 결과 저장 후 곧바로 결과 화면으로 이동
             ss.pred_label = answers.get("risk") or "안정형"
             ss.answers = answers
             ss.flow = "result"
+            st.rerun()  # ← 즉시 결과 화면으로 전환
         else:
             try:
                 arr = map_survey_to_model_input(answers)
@@ -595,13 +599,22 @@ elif ss.flow == "survey":
                 st.session_state["tabnet_label"] = tabnet_label
                 st.session_state["pred_label"]   = tabnet_label
                 ss.answers = answers
-                proba_method = getattr(survey_model, "predict_proba", None)
-                if callable(proba_method):
-                    proba = proba_method(arr)
-                    proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
-                    st.bar_chart(proba_df.T)
-                st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
+    
+                # (선택) 예측 확률 막대차트
+                if SHOW_PROBA_CHART:
+                    proba_method = getattr(survey_model, "predict_proba", None)
+                    if callable(proba_method):
+                        proba = proba_method(arr)
+                        proba_df = pd.DataFrame(proba, columns=survey_encoder.classes_)
+                        st.bar_chart(proba_df.T)
+    
+                # (선택) 성공 메시지
+                if SHOW_SUCCESS_TOAST:
+                    st.success(f"🧾 예측된 금융 유형: **{tabnet_label}**")
+    
+                # 곧바로 유형 결과 화면으로 이동
                 ss.flow = "result"
+                st.rerun()  # ← 여기 추가가 핵심
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
