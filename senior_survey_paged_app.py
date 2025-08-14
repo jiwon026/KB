@@ -362,8 +362,8 @@ TABNET_TYPE_DESCRIPTIONS = {
 }
 DEFAULT_DISPLAY_TYPE = "균형형"
 
-def render_final_screen(display_type: str, rec_df: pd.DataFrame):
-    # TabNet 유형 우선 → 없으면 투자성향 → 폴백
+def render_final_screen_clickable(display_type: str, rec_df: pd.DataFrame):
+    # 제목/설명(그대로 유지)
     if display_type in TABNET_TYPE_DESCRIPTIONS:
         title = display_type
         desc  = TABNET_TYPE_DESCRIPTIONS[display_type]
@@ -374,52 +374,61 @@ def render_final_screen(display_type: str, rec_df: pd.DataFrame):
         title = DEFAULT_DISPLAY_TYPE
         desc  = TABNET_TYPE_DESCRIPTIONS.get(DEFAULT_DISPLAY_TYPE, "")
 
-
-
+    # 카드형 Expander 스타일
     st.markdown("""
     <style>
-      .hero { font-size: 38px; font-weight: 800; margin: 4px 0 8px 0; }
-      .desc { font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
-      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-      .card {
-        border: 2px solid #eaeaea; border-radius: 18px; padding: 16px 14px;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.06); background: #fff;
+      .ex-card [data-testid="stExpander"] { border:0 !important; }
+      .ex-card details {
+        border: 2px solid #eaeaea !important; border-radius: 18px !important;
+        background: #fff !important; box-shadow: 0 4px 14px rgba(0,0,0,0.06) !important;
+        margin-bottom: 12px !important;
       }
-      .badge {
-        display:inline-flex; align-items:center; justify-content:center;
-        width:28px; height:28px; border-radius:50%; color:#fff; font-weight:700;
-        margin-right:8px;
+      .ex-card summary {
+        list-style: none; cursor: pointer; padding: 14px 16px !important;
       }
-      .b1{ background:#ff5a5a; } .b2{ background:#7c4dff; } .b3{ background:#10b981; }
-      .pname{ font-size:17px; font-weight:700; margin:6px 0 10px 0; }
-      .meta{ font-size:14px; line-height:1.5; }
-      .k { font-weight:700; }
+      .ex-title { font-size:17px; font-weight:800; margin-right:8px; }
+      .ex-line  { font-size:14px; color:#222; }
+      .ex-k { font-weight:700; }
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f'<div class="hero">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
+    st.markdown(f"## {title}")
+    st.caption(desc)
 
-    colors = ["b1", "b2", "b3"]
     items = rec_df.head(3).to_dict(orient="records")
-
-    cards = []
     for i, r in enumerate(items, start=1):
-        cname = colors[i-1 if i-1 < len(colors) else -1]
         name = str(r.get("상품명", "-"))
         mret = r.get("월예상수익금(만원)", "-")
         risk = r.get("리스크", "-")
-        card_html = (
-            f'<div class="card">'
-            f'<div><span class="badge {cname}">{i}</span><span class="pname">{name}</span></div>'
-            f'<div class="meta"><span class="k">월 예상수익</span> {mret}만원</div>'
-            f'<div class="meta"><span class="k">리스크</span> {risk}</div>'
-            f'</div>'
-        )
-        cards.append(card_html)
+        period = r.get("투자기간(개월)", r.get("권장투자기간", "-"))
+        min_amt = r.get("최소투자금액", "-")
+        # '예상수익률'이 소수(0.05)면 % 텍스트로 보이게 처리
+        if "예상수익률(연)" in r and pd.notnull(r["예상수익률(연)"]):
+            rate_txt = str(r["예상수익률(연)"])
+        else:
+            try:
+                rate_txt = f"{float(r.get('예상수익률', 0.0)) * 100:.2f}%"
+            except:
+                rate_txt = "-"
 
-    cards_html = '<div class="cards">' + ''.join(cards) + '</div>'
-    st.markdown(cards_html, unsafe_allow_html=True)
+        # ▽ 카드 헤더 (클릭 가능한 summary)
+        with st.container():
+            st.markdown('<div class="ex-card">', unsafe_allow_html=True)
+            with st.expander(
+                label=f"{i}. {name}  ·  월 예상수익 {mret}만원  ·  리스크 {risk}",
+                expanded=False
+            ):
+                # ▽ 펼쳐졌을 때 상세
+                rows = [
+                    ("상품명", name),
+                    ("월예상수익금(만원)", mret),
+                    ("예상수익률", rate_txt),
+                    ("투자기간", f"{period}개월"),
+                    ("최소투자금액", min_amt),
+                ]
+                st.table(pd.DataFrame(rows, columns=["항목", "값"]))
+            st.markdown('</div>', unsafe_allow_html=True)
+
 
 # =================================
 # UI 흐름
@@ -675,7 +684,7 @@ elif ss.flow == "recommend":
         display_type = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
         risk_choice  = st.session_state.get("risk_choice", "위험중립형")
 
-        render_final_screen(display_type, rec_df)
+        render_final_screen_clickable(display_type, rec_df)
         # === 추천 카드 아래 '자세히 보기' 버튼들 ===
         rec_records = rec_df.head(3).to_dict(orient="records")
         cols = st.columns(len(rec_records) if rec_records else 1)
