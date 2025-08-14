@@ -674,13 +674,6 @@ elif ss.flow == "recommend":
                 ss.flow = "main"         # 상태는 유지(원하면 유지), '처음으로'와 역할 분리
                 st.rerun()
 
-    # 네비게이션
-    if st.button("처음으로 돌아가기"):
-        for k in ["flow", "pred_amount", "answers", "prefill_survey", "pred_label",
-                  "rec_df","display_type","risk_choice","show_reco","sim_ready","sim_inputs"]:
-            st.session_state.pop(k, None)
-        st.rerun()
-
 
 elif ss.flow == "predict":
     st.subheader("📈 연금 계산기")
