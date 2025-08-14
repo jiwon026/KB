@@ -425,6 +425,20 @@ ss.setdefault("prefill_survey", {})
 ss.setdefault("pred_label", None)
 ss.setdefault("tabnet_label", None)    # ← TabNet 금융유형(표시용)
 
+def reset_app_state(go: str | None = None):
+    """앱 상태 초기화. go가 'main'/'survey' 등이면 그 화면으로 이동."""
+    for k in [
+        "flow", "pred_amount", "answers", "prefill_survey", "pred_label",
+        "tabnet_label", "rec_df", "display_type", "risk_choice",
+        "show_reco", "show_sim", "sim_ready", "sim_inputs",
+        # 설문 위젯 키도 함께 초기화(충돌/잔상 방지)
+        *[kk for kk in st.session_state.keys() if str(kk).startswith("survey_")],
+    ]:
+        st.session_state.pop(k, None)
+    if go:
+        st.session_state["flow"] = go
+    st.rerun()
+
 def render_main_big():
     st.title("🔎 큰글씨 모드 메인")
 
@@ -462,8 +476,9 @@ def render_main_big():
         if st.button("연금 계산하기(미수령자)", use_container_width=True, key="btn_predict"):
             ss.flow = "predict"
     with colB:
+        # 기존: ss.flow = "survey"
         if st.button("설문 다시하기", use_container_width=True, key="btn_survey_again"):
-            ss.flow = "survey"
+            reset_app_state(go="survey")   # ← 초기화 후 설문으로 이동
 
 
 # 공통 설문 문항
