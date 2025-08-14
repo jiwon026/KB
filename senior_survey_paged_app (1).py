@@ -826,7 +826,7 @@ if 'user_type' not in st.session_state:
 # =================================
 # 헤더 컴포넌트
 # =================================
-def render_header(title="시니어 연금 계산기"):
+def render_header(title="노후愛"):
     st.markdown(f"""
     <div class="main-header">
         <div class="kb-logo">
