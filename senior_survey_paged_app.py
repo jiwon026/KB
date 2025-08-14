@@ -449,46 +449,98 @@ def reset_app_state(go: str | None = None):
         st.session_state["flow"] = go
     st.rerun()
 
-def render_main_big():
-    st.title("🔎 큰글씨 모드 메인")
-
+# ===== 메인 화면 (이미지처럼) =====
+def render_main_home():
+    # 페이지용 스타일 (버튼 색/모양, 카드 레이아웃)
     st.markdown("""
     <style>
-      .bigbtn > div > button { height: 72px; font-size: 20px; font-weight: 800; }
+      .home-card{
+        max-width: 360px; margin: 0 auto; padding: 20px 18px;
+        background:#ffffff; border:1px solid #eee; border-radius:24px;
+        box-shadow:0 10px 30px rgba(0,0,0,.06);
+      }
+      .brand { display:flex; align-items:center; gap:10px; }
+      .brand .kb { font-weight:900; font-size:28px; letter-spacing:1px; }
+      .title { font-weight:900; font-size:26px; margin:8px 0 16px; }
+      .menu .stButton>button{
+        width:100%; height:56px; border-radius:18px; font-size:18px; font-weight:800;
+        border:0;
+      }
+      /* 파스텔 톤 5색 */
+      .menu .stButton:nth-child(1)>button{ background:#FFE4B5; color:#533c00; } /* 베이지 */
+      .menu .stButton:nth-child(2)>button{ background:#D7E3FF; color:#0f2b7e; } /* 하늘 */
+      .menu .stButton:nth-child(3)>button{ background:#D9F7E7; color:#0f5132; } /* 민트 */
+      .menu .stButton:nth-child(4)>button{ background:#FFD6D1; color:#7a1b13; } /* 코랄 */
+      .menu .stButton:nth-child(5)>button{ background:#E9D8FD; color:#3b0764; } /* 라일락 */
+      .menu .stButton{ margin-bottom:12px; }
+      .caption{ font-size:12px; color:#666; text-align:center; margin-top:6px; }
     </style>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("내 금융유형 보기", use_container_width=True, key="btn_type", help="설문 완료 시 바로 이동", type="primary"):
-            if ss.get("tabnet_label"):
-                ss.flow = "result"
+    # 메인 카드
+    with st.container():
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+
+        # 브랜드/타이틀
+        col1, col2 = st.columns([1,4])
+        with col1:
+            # 로고 이미지가 있으면 사용, 없으면 이모지
+            logo_path = os.path.join(BASE_DIR, "kb_logo.png")
+            if os.path.exists(logo_path):
+                st.image(logo_path, use_column_width=True)
             else:
-                ss.flow = "survey"
+                st.markdown("### ✳️")
+                st.markdown("👵👴")
+        with col2:
+            st.markdown('<div class="brand"><div class="kb">KB</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="title">시니어 연금 계산기</div>', unsafe_allow_html=True)
 
-        if st.button("노후 시뮬레이션", use_container_width=True, key="btn_sim"):
-            ss.flow = "sim"   # 추천 화면 하단의 시뮬레이션 섹션으로
+        # 메뉴 버튼
+        st.markdown('<div class="menu">', unsafe_allow_html=True)
 
-    with col2:
-        if st.button("맞춤 상품 추천", use_container_width=True, key="btn_reco"):
-            if ss.get("tabnet_label"):
-                ss.flow = "recommend"
+        # 1) 내 금융 유형 보기
+        if st.button("내 금융 유형 보기", key="home_btn_type"):
+            if st.session_state.get("tabnet_label"):
+                st.session_state["flow"] = "result"
             else:
-                ss.flow = "survey"
+                st.session_state["flow"] = "survey"
+            st.rerun()
 
-        if st.button("투자 수익률 계산기", use_container_width=True, key="btn_calc"):
-            ss.flow = "recommend"
+        # 2) 연금 계산하기
+        if st.button("연금 계산하기", key="home_btn_predict"):
+            st.session_state["flow"] = "predict"
+            st.rerun()
 
-    st.markdown("---")
-    st.subheader("바로가기")
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("연금 계산하기(미수령자)", use_container_width=True, key="btn_predict"):
-            ss.flow = "predict"
-    with colB:
-        # 기존: ss.flow = "survey"
-        if st.button("설문 다시하기", use_container_width=True, key="btn_survey_again"):
-            reset_app_state(go="survey")   # ← 초기화 후 설문으로 이동
+        # 3) 노후 시뮬레이션
+        if st.button("노후  시뮬레이션", key="home_btn_sim"):
+            st.session_state["flow"] = "sim"
+            st.rerun()
+
+        # 4) 맞춤 상품 추천
+        if st.button("맞춤 상품 추천", key="home_btn_reco"):
+            st.session_state["flow"] = "recommend"
+            st.rerun()
+
+        # 5) 설문 다시하기  → 초기화 후 설문으로
+        if st.button("설문 다시하기", key="home_btn_reset"):
+            # reset_app_state()를 이미 만들었다면 그걸 사용
+            if "reset_app_state" in globals():
+                reset_app_state(go="survey")
+            else:
+                # 예비: 최소한의 초기화
+                for k in [
+                    "flow","pred_amount","answers","prefill_survey","pred_label",
+                    "tabnet_label","rec_df","display_type","risk_choice",
+                    "show_reco","show_sim","sim_ready","sim_inputs",
+                    *[kk for kk in st.session_state.keys() if str(kk).startswith("survey_")],
+                ]: st.session_state.pop(k, None)
+                st.session_state["flow"] = "survey"
+                st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)  # /.menu
+        st.markdown('<div class="caption">버튼을 눌러 다음 단계로 이동하세요</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)  # /.home-card
+
 
 
 # 공통 설문 문항
@@ -583,7 +635,7 @@ def map_survey_to_model_input(r):
 
 
 if ss.flow == "main":
-    render_main_big()
+    render_main_home()
 elif ss.flow == "survey":
     answers, submitted = render_survey_form(
         defaults=ss.get("prefill_survey", {}),
