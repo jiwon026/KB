@@ -596,7 +596,7 @@ def render_custom_recommendation_page():
 
 # render_recommendation_page도 업데이트 (설문 기반 추천 개선)
 # render_recommendation_page 함수 수정 (1100라인 근처)
-def render_recommendation_page():
+def render_recommendation_hub():
     render_header("맞춤 상품 추천")
     
     st.markdown("""
