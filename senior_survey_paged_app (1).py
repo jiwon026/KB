@@ -83,38 +83,48 @@ st.markdown("""
 
 st.markdown("""
 <style>
-/* 공통 버튼 스타일 */
+/* 공통 버튼 스타일 유지 */
 .stButton > button {
-    width:100% !important;
-    height:72px !important;
-    border-radius:20px !important;
-    font-size:18px !important;
-    font-weight:bold !important;
-    border:none !important;
-    box-shadow:0 2px 8px rgba(0,0,0,0.1) !important;
-    transition:all .2s ease !important;
-    white-space:pre-line !important;
+    width:100% !important; height:72px !important; border-radius:20px !important;
+    font-size:18px !important; font-weight:bold !important; border:none !important;
+    box-shadow:0 2px 8px rgba(0,0,0,0.1) !important; transition:all .2s ease !important; white-space:pre-line !important;
 }
 
-/* 각 버튼 색상 */
-button[title="btn-fin-type"] {
-    background:#FFD700 !important; color:#1f2937 !important;
+/* ====== 메인 버튼별 색상 (help 속성으로 타겟팅) ====== */
+/* 내 금융유형 보기: 노란색 */
+button[title="btn-fin-type"]{
+  background:#FFD700 !important; color:#1f2937 !important;
 }
-button[title="btn-pension-calc"] {
-    background:#87CEFA !important; color:#1f2937 !important;
+button[title="btn-fin-type"]:hover{ filter:brightness(0.98); }
+
+/* 연금 계산하기: 하늘색 */
+button[title="btn-pension-calc"]{
+  background:#87CEFA !important; color:#1f2937 !important;
 }
-button[title="btn-simulation"] {
-    background:#FFB6C1 !important; color:#1f2937 !important;
+button[title="btn-pension-calc"]:hover{ filter:brightness(0.98); }
+
+/* 노후시뮬레이션: 핑크 */
+button[title="btn-simulation"]{
+  background:#FFB6C1 !important; color:#1f2937 !important;
 }
-button[title="btn-recommend"] {
-    background:#90EE90 !important; color:#1f2937 !important;
+button[title="btn-simulation"]:hover{ filter:brightness(0.98); }
+
+/* 맞춤 상품 추천: 연두색 */
+button[title="btn-recommend"]{
+  background:#90EE90 !important; color:#1f2937 !important;
 }
+button[title="btn-recommend"]:hover{ filter:brightness(0.98); }
+
+/* 다시 설문하기 & 전화상담: 연주황 */
 button[title="btn-survey-reset"],
-button[title="btn-phone"] {
-    background:#FFA07A !important; color:#1f2937 !important;
+button[title="btn-phone"]{
+  background:#FFA07A !important; color:#1f2937 !important;
 }
+button[title="btn-survey-reset"]:hover,
+button[title="btn-phone"]:hover{ filter:brightness(0.98); }
 </style>
 """, unsafe_allow_html=True)
+
 
 # =========================
 # 경로/파일
