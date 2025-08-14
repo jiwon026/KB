@@ -425,106 +425,123 @@ def render_final_screen(display_type: str, rec_df: pd.DataFrame):
 # 개선된 메인 화면 UI
 # =================================
 def render_main_screen():
-    # CSS 스타일링 - 시니어 친화적인 큰 UI
+    st.markdown("""
+    <div style="text-align: center; padding: 20px 0 40px 0;">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+            <span style="font-size: 48px; color: #FFB800; margin-right: 15px;">💰</span>
+            <h1 style="margin: 0; font-size: 32px; font-weight: bold; color: #333;">KB</h1>
+        </div>
+        <h2 style="margin: 0; font-size: 28px; font-weight: bold; color: #333;">시니어 연금 계산기</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 메인 버튼들을 위한 CSS 스타일
     st.markdown("""
     <style>
-        /* 전체 페이지 스타일 */
-        .main-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        /* 헤더 스타일 */
-        .header-section {
-            text-align: center;
-            margin-bottom: 40px;
-            padding: 30px 20px;
-            background: linear-gradient(135deg, #f8f9ff 0%, #fff5e6 100%);
-            border-radius: 20px;
-            border: 3px solid #ffd700;
-        }
-        
-        .kb-logo {
-            font-size: 48px;
-            font-weight: 900;
-            color: #ffa500;
-            margin-bottom: 10px;
-        }
-        
-        .elderly-icon {
-            font-size: 64px;
-            margin: 10px;
-        }
-        
-        .main-title {
-            font-size: 36px;
-            font-weight: 800;
-            color: #333;
-            margin: 20px 0;
-            line-height: 1.3;
-        }
-        
-        /* 메뉴 버튼 스타일 */
-       
-        .stButton > button {
-            width: 100% !important;
-            height: 80px !important;
-            border-radius: 20px !important;
-            font-size: 18px !important;
-            font-weight: bold !important;
-            border: none !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-            transition: all 0.2s ease !important;
-            white-space: pre-line !important;
-        }
-        
-        .stButton > button:hover {
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-        }
-        
-        .btn-survey {
-            background: linear-gradient(135deg, #FFE082 0%, #FFB74D 100%);
-            border: 3px solid #FF9800;
-        }
-        
-        .btn-pension {
-            background: linear-gradient(135deg, #81C784 0%, #66BB6A 100%);
-            border: 3px solid #4CAF50;
-        }
-        
-        .btn-simulation {
-            background: linear-gradient(135deg, #90CAF9 0%, #64B5F6 100%);
-            border: 3px solid #2196F3;
-        }
-        
-        .btn-products {
-            background: linear-gradient(135deg, #F48FB1 0%, #E91E63 100%);
-            border: 3px solid #C2185B;
-        }
-        
-        .btn-restart {
-            background: linear-gradient(135deg, #CE93D8 0%, #BA68C8 100%);
-            border: 3px solid #9C27B0;
-        }
-        
-        /* 진행률 표시 */
-        .progress-section {
-            margin: 30px 0;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 15px;
-            border: 2px solid #dee2e6;
-        }
-        
-        .progress-text {
-            font-size: 18px;
-            font-weight: 600;
-            color: #495057;
-            margin-bottom: 10px;
-        }
+    .main-button {
+        display: block;
+        width: 100%;
+        padding: 25px 20px;
+        margin: 15px 0;
+        border: none;
+        border-radius: 25px;
+        font-size: 20px;
+        font-weight: bold;
+        text-align: center;
+        text-decoration: none;
+        color: white;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .main-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    .btn-yellow { background: linear-gradient(135deg, #FFD700, #FFA500); }
+    .btn-blue { background: linear-gradient(135deg, #4A90E2, #357ABD); }
+    .btn-green { background: linear-gradient(135deg, #7ED321, #5CB85C); }
+    .btn-pink { background: linear-gradient(135deg, #FF6B9D, #E91E63); }
+    .btn-purple { background: linear-gradient(135deg, #9B59B6, #8E44AD); }
+    
+    /* Streamlit 버튼 스타일 오버라이드 */
+    .stButton > button {
+        width: 100%;
+        height: 80px;
+        font-size: 22px;
+        font-weight: bold;
+        border-radius: 25px;
+        border: none;
+        color: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
     </style>
+    """, unsafe_allow_html=True)
+
+    # 버튼 컨테이너
+    st.markdown('<div style="max-width: 400px; margin: 0 auto;">', unsafe_allow_html=True)
+    
+    # 내 금융 유형 보기 버튼 (노란색)
+    if st.button("📊 내 금융 유형 보기", 
+                 use_container_width=True, 
+                 key="btn_type", 
+                 help="설문을 통해 나의 금융 유형을 확인하세요",
+                 type="primary"):
+        if ss.get("tabnet_label"):
+            ss.flow = "result"
+        else:
+            ss.flow = "survey"
+        st.rerun()
+
+    # 연금 계산하기 버튼 (파란색)  
+    if st.button("💰 연금 계산하기", 
+                 use_container_width=True, 
+                 key="btn_pension"):
+        ss.flow = "predict"
+        st.rerun()
+
+    # 노후 시뮬레이션 버튼 (초록색)
+    if st.button("📈 노후 시뮬레이션", 
+                 use_container_width=True, 
+                 key="btn_simulation"):
+        ss.flow = "sim"
+        st.rerun()
+
+    # 맞춤 상품 추천 버튼 (분홍색)
+    if st.button("🎯 맞춤 상품 추천", 
+                 use_container_width=True, 
+                 key="btn_recommend"):
+        if ss.get("tabnet_label"):
+            ss.flow = "recommend"
+        else:
+            ss.flow = "survey"
+        st.rerun()
+
+    # 설문 다시하기 버튼 (보라색)
+    if st.button("📝 설문 다시하기", 
+                 use_container_width=True, 
+                 key="btn_survey_reset"):
+        reset_app_state(go="survey")
+        st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 하단 안내 메시지
+    st.markdown("""
+    <div style="text-align: center; margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 15px;">
+        <p style="margin: 0; color: #666; font-size: 16px;">
+            💡 <strong>시작하기:</strong> 먼저 '내 금융 유형 보기'로 설문을 완료하시면<br>
+            개인 맞춤형 연금 계산과 상품 추천을 받을 수 있습니다.
+        </p>
+    </div>
     """, unsafe_allow_html=True)
 
     # 메인 컨테이너
