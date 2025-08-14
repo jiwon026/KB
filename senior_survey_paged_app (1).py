@@ -846,9 +846,12 @@ def render_main_page():
     
     # 내 금융유형 보기 버튼
     if st.button("내 금융유형\n보기", key="financial_type", use_container_width=True):
-        st.session_state.page = 'survey'
-        st.session_state.question_step = 1
-        st.session_state.answers = {}
+        if st.session_state.get('user_type'):           # 설문 완료 → 결과 페이지로
+            st.session_state.page = 'survey_result'
+        else:                                           # 미완료 → 설문 시작
+            st.session_state.page = 'survey'
+            st.session_state.question_step = 1
+            st.session_state.answers = {}
         st.rerun()
     
     st.markdown('<div style="margin: 15px 0;"></div>', unsafe_allow_html=True)
@@ -870,10 +873,9 @@ def render_main_page():
     
     with col2:
         if st.button("맞춤 상품\n추천", key="recommendation", use_container_width=True):
-            # 설문 완료 여부에 따라: 설문 완료 → 합친 화면, 미완료 → 설문으로
-            if st.session_state.answers:
+            if st.session_state.get('answers'):         # 설문 값 있으면 합친 화면으로
                 st.session_state.page = 'survey_plus_custom'
-            else:
+            else:                                       # 없으면 설문부터
                 st.session_state.page = 'survey'
                 st.session_state.question_step = 1
                 st.session_state.answers = {}
