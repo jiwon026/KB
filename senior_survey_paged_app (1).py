@@ -113,9 +113,16 @@ st.markdown("""
         font-size: 16px !important;
     }
     
-    div[data-testid="stVerticalBlock"] > div:nth-child(7) .stButton > button {
+    div[data-testid="stVerticalBlock"] > div:nth-child(7) div:nth-child(1) .stButton > button {
         background: #DDD6FE !important;
         color: #5B21B6 !important;
+        height: 60px !important;
+        font-size: 16px !important;
+    }
+    
+    div[data-testid="stVerticalBlock"] > div:nth-child(7) div:nth-child(2) .stButton > button {
+        background: #FDE68A !important;
+        color: #92400E !important;
         height: 60px !important;
         font-size: 16px !important;
     }
@@ -173,6 +180,23 @@ st.markdown("""
     .product-card:hover {
         border-color: #3B82F6;
         box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1);
+    }
+    
+    .consultation-info {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+    }
+    
+    .consultation-card {
+        background: white;
+        border: 2px solid #4F46E5;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 4px 15px rgba(79, 70, 229, 0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -339,11 +363,129 @@ def render_main_page():
     
     st.markdown('<div style="margin: 15px 0;"></div>', unsafe_allow_html=True)
     
-    # 설문 다시하기 버튼
-    if st.button("설문\n다시하기", key="survey_reset", use_container_width=True):
-        st.session_state.page = 'survey'
-        st.session_state.question_step = 1
-        st.session_state.answers = {}
+    # 설문 다시하기와 전화 상담 버튼
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("설문\n다시하기", key="survey_reset", use_container_width=True):
+            st.session_state.page = 'survey'
+            st.session_state.question_step = 1
+            st.session_state.answers = {}
+            st.rerun()
+    
+    with col2:
+        if st.button("📞 전화\n상담", key="phone_consultation", use_container_width=True):
+            st.session_state.page = 'phone_consultation'
+            st.rerun()
+
+# =================================
+# 전화 상담 페이지
+# =================================
+def render_phone_consultation_page():
+    render_header("전화 상담")
+    
+    st.markdown("""
+    <div class="consultation-info">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: white;">📞 전문 상담사와 1:1 상담</h2>
+            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">복잡한 연금 제도, 전문가가 쉽게 설명해드립니다</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="consultation-card">
+        <h3 style="color: #4F46E5; margin-bottom: 15px;">📞 KB 시니어 연금 상담센터</h3>
+        
+        <div style="margin: 15px 0;">
+            <strong style="color: #1F2937;">상담 전화번호:</strong>
+            <span style="font-size: 24px; font-weight: bold; color: #4F46E5; margin-left: 10px;">1588-9999</span>
+        </div>
+        
+        <div style="margin: 15px 0;">
+            <strong style="color: #1F2937;">상담 시간:</strong>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>평일: 오전 9시 ~ 오후 6시</li>
+                <li>토요일: 오전 9시 ~ 오후 1시</li>
+                <li>일요일 및 공휴일 휴무</li>
+            </ul>
+        </div>
+        
+        <div style="margin: 15px 0;">
+            <strong style="color: #1F2937;">상담 가능 내용:</strong>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>🏦 연금 상품 상세 안내</li>
+                <li>📝 가입 절차 및 필요 서류</li>
+                <li>💰 수령 방법 및 시기</li>
+                <li>💸 세제 혜택 안내</li>
+                <li>📊 개인 맞춤 포트폴리오 구성</li>
+            </ul>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### 📋 상담 예약 신청")
+    st.markdown("아래 정보를 입력하시면 전문 상담사가 먼저 연락드립니다.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        name = st.text_input("성함 *", placeholder="홍길동")
+        consultation_type = st.selectbox(
+            "상담 유형 *",
+            ["선택해주세요", "연금 상품 문의", "가입 절차 문의", "수령 방법 상담", "세제 혜택 문의", "기타"]
+        )
+    
+    with col2:
+        phone = st.text_input("연락처 *", placeholder="010-1234-5678")
+        preferred_time = st.selectbox(
+            "희망 상담 시간",
+            ["상관없음", "오전 (9시-12시)", "오후 (1시-3시)", "늦은 오후 (3시-6시)"]
+        )
+    
+    inquiry = st.text_area("문의 내용", placeholder="궁금한 점이나 상담받고 싶은 내용을 자유롭게 적어주세요.", height=100)
+    
+    st.markdown('<div style="margin: 20px 0;"></div>', unsafe_allow_html=True)
+    
+    if st.button("📞 상담 신청하기", use_container_width=True):
+        if name and phone and consultation_type != "선택해주세요":
+            # 상담 신청 처리 로직
+            st.balloons()
+            st.success(f"""
+            ✅ **상담 신청이 완료되었습니다!**
+            
+            **신청자:** {name}님  
+            **연락처:** {phone}  
+            **상담 유형:** {consultation_type}  
+            **희망 시간:** {preferred_time}
+            
+            📞 영업일 기준 24시간 내에 전문 상담사가 연락드리겠습니다.
+            """)
+            
+            # 세션에 상담 신청 정보 저장
+            st.session_state.consultation_requested = {
+                'name': name,
+                'phone': phone,
+                'type': consultation_type,
+                'time': preferred_time,
+                'inquiry': inquiry
+            }
+            
+        else:
+            st.error("⚠️ 필수 항목(*)을 모두 입력해주세요.")
+    
+    st.markdown('<div style="margin: 30px 0;"></div>', unsafe_allow_html=True)
+    
+    # 추가 정보
+    st.info("""
+    💡 **상담 전 준비사항**
+    - 신분증 및 소득 관련 서류
+    - 기존 가입 연금 정보
+    - 투자 목표 및 위험 성향 파악
+    """)
+    
+    if st.button("← 메인으로 돌아가기", use_container_width=True):
+        st.session_state.page = 'main'
         st.rerun()
 
 # =================================
@@ -792,6 +934,8 @@ def main():
         render_recommendation_page()
     elif st.session_state.page == 'simulation':
         render_simulation_page()
+    elif st.session_state.page == 'phone_consultation':
+        render_phone_consultation_page()
 
 if __name__ == "__main__":
     main()
