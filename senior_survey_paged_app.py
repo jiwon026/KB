@@ -461,9 +461,9 @@ def render_main_home():
       
       /* 메인 컨테이너 카드 */
       .main-container {
-        max-width: 400px;
+        max-width: 480px;
         margin: 2rem auto;
-        padding: 2rem;
+        padding: 2.5rem;
         background: white;
         border-radius: 20px;
         box-shadow: 0 20px 40px rgba(0,0,0,0.1);
@@ -482,22 +482,22 @@ def render_main_home():
         background: #4A90E2;
         color: white;
         font-weight: 900;
-        font-size: 24px;
-        padding: 8px 16px;
+        font-size: 32px;
+        padding: 12px 20px;
         border-radius: 8px;
         margin-right: 12px;
       }
       
       .elderly-icons {
-        font-size: 32px;
+        font-size: 40px;
         margin-left: 8px;
       }
       
       .app-title {
-        font-size: 28px;
+        font-size: 36px;
         font-weight: 800;
         color: #2c3e50;
-        margin: 1rem 0;
+        margin: 1.5rem 0;
         line-height: 1.2;
       }
       
@@ -508,11 +508,11 @@ def render_main_home():
       
       .menu-button {
         width: 100%;
-        padding: 16px 20px;
-        margin: 8px 0;
+        padding: 22px 24px;
+        margin: 12px 0;
         border: none;
         border-radius: 16px;
-        font-size: 18px;
+        font-size: 22px;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.3s ease;
