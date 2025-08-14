@@ -476,20 +476,12 @@ def render_main_home():
       }
       
       .kb-logo {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: #4A90E2;
-        color: white;
-        font-weight: 900;
-        font-size: 32px;
-        padding: 12px 20px;
-        border-radius: 8px;
-        margin-right: 12px;
+        height: 50px;
+        margin-right: 15px;
       }
       
-      .elderly-icons {
-        font-size: 48px;
+      .elderly-illustration {
+        height: 80px;
         margin-left: 10px;
       }
       
@@ -508,13 +500,12 @@ def render_main_home():
       
       .menu-button {
         width: 100%;
-        height: 80px
         padding: 22px 24px;
         margin: 12px 0;
         border: none;
-        border-radius: 20px;
-        font-size: 80px;
-        font-weight: 800;
+        border-radius: 16px;
+        font-size: 22px;
+        font-weight: 700;
         cursor: pointer;
         transition: all 0.3s ease;
         text-align: center;
@@ -556,14 +547,15 @@ def render_main_home():
       /* Streamlit 기본 버튼 스타일 오버라이드 */
       .stButton > button {
         width: 100% !important;
-        padding: 16px 20px !important;
-        margin: 8px 0 !important;
+        padding: 22px 24px !important;
+        margin: 12px 0 !important;
         border: none !important;
         border-radius: 16px !important;
-        font-size: 18px !important;
+        font-size: 22px !important;
         font-weight: 700 !important;
         cursor: pointer !important;
         transition: all 0.3s ease !important;
+        min-height: 70px !important;
       }
       
       /* 각 버튼의 색상 적용 */
@@ -600,7 +592,7 @@ def render_main_home():
       /* 하단 설명 텍스트 */
       .footer-text {
         margin-top: 1.5rem;
-        font-size: 14px;
+        font-size: 16px;
         color: #7f8c8d;
         font-style: italic;
       }
@@ -609,16 +601,25 @@ def render_main_home():
       @media (max-width: 480px) {
         .main-container {
           margin: 1rem;
-          padding: 1.5rem;
+          padding: 2rem;
         }
         
         .app-title {
-          font-size: 24px;
+          font-size: 30px;
+        }
+        
+        .kb-logo {
+          height: 40px;
+        }
+        
+        .elderly-illustration {
+          height: 60px;
         }
         
         .menu-button, .stButton > button {
-          font-size: 16px !important;
-          padding: 14px 18px !important;
+          font-size: 20px !important;
+          padding: 20px 22px !important;
+          min-height: 65px !important;
         }
       }
     </style>
@@ -631,8 +632,89 @@ def render_main_home():
     st.markdown("""
     <div class="brand-section">
         <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
-            <div class="kb-logo">KB</div>
-            <div class="elderly-icons">👵👴</div>
+            <img src="https://w7.pngwing.com/pngs/79/851/png-transparent-kb-hd-logo.png" 
+                 alt="KB Logo" class="kb-logo" />
+            <svg class="elderly-illustration" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+                <!-- 할머니 -->
+                <g transform="translate(50, 20)">
+                    <!-- 머리 -->
+                    <circle cx="60" cy="60" r="40" fill="#F4C2A1" stroke="#8B4513" stroke-width="3"/>
+                    <!-- 머리카락 -->
+                    <path d="M25 45 Q30 25 60 25 Q90 25 95 45 Q95 35 90 30 Q60 15 30 30 Q25 35 25 45" 
+                          fill="#D2B48C" stroke="#8B4513" stroke-width="3"/>
+                    <circle cx="60" cy="35" r="15" fill="#D2B48C" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 안경 -->
+                    <circle cx="50" cy="55" r="12" fill="none" stroke="#8B4513" stroke-width="3"/>
+                    <circle cx="70" cy="55" r="12" fill="none" stroke="#8B4513" stroke-width="3"/>
+                    <line x1="62" y1="55" x2="58" y2="55" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 눈 -->
+                    <circle cx="50" cy="55" r="6" fill="#FFF"/>
+                    <circle cx="70" cy="55" r="6" fill="#FFF"/>
+                    <circle cx="50" cy="55" r="3" fill="#000"/>
+                    <circle cx="70" cy="55" r="3" fill="#000"/>
+                    <!-- 코 -->
+                    <ellipse cx="60" cy="65" rx="3" ry="5" fill="#E6A87C"/>
+                    <!-- 입 -->
+                    <path d="M55 75 Q60 80 65 75" stroke="#8B4513" stroke-width="2" fill="none"/>
+                    <!-- 몸 -->
+                    <rect x="35" y="95" width="50" height="70" rx="10" fill="#CD853F" stroke="#8B4513" stroke-width="3"/>
+                    <rect x="40" y="100" width="40" height="60" rx="8" fill="#DEB887" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 단추들 -->
+                    <circle cx="60" cy="115" r="3" fill="#8B4513"/>
+                    <circle cx="60" cy="130" r="3" fill="#8B4513"/>
+                    <circle cx="60" cy="145" r="3" fill="#8B4513"/>
+                    <!-- 치마 -->
+                    <rect x="30" y="155" width="60" height="40" rx="8" fill="#A0522D" stroke="#8B4513" stroke-width="3"/>
+                    <!-- 팔 -->
+                    <ellipse cx="25" cy="120" rx="8" ry="25" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <ellipse cx="95" cy="120" rx="8" ry="25" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 손 -->
+                    <circle cx="25" cy="140" r="8" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <circle cx="95" cy="140" r="8" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                </g>
+                
+                <!-- 할아버지 -->
+                <g transform="translate(200, 20)">
+                    <!-- 머리 -->
+                    <circle cx="60" cy="60" r="40" fill="#F4C2A1" stroke="#8B4513" stroke-width="3"/>
+                    <!-- 대머리 부분과 옆머리 -->
+                    <path d="M25 55 Q30 35 40 40 Q45 45 50 45" stroke="#D2B48C" stroke-width="4" fill="none"/>
+                    <path d="M95 55 Q90 35 80 40 Q75 45 70 45" stroke="#D2B48C" stroke-width="4" fill="none"/>
+                    <!-- 이마 주름 -->
+                    <path d="M45 40 Q60 38 75 40" stroke="#E6A87C" stroke-width="1" fill="none"/>
+                    <path d="M48 45 Q60 43 72 45" stroke="#E6A87C" stroke-width="1" fill="none"/>
+                    <!-- 눈 -->
+                    <circle cx="50" cy="55" r="6" fill="#FFF" stroke="#8B4513" stroke-width="2"/>
+                    <circle cx="70" cy="55" r="6" fill="#FFF" stroke="#8B4513" stroke-width="2"/>
+                    <circle cx="50" cy="55" r="3" fill="#000"/>
+                    <circle cx="70" cy="55" r="3" fill="#000"/>
+                    <!-- 코 -->
+                    <ellipse cx="60" cy="65" rx="4" ry="6" fill="#E6A87C"/>
+                    <!-- 콧수염 -->
+                    <path d="M50 72 Q60 75 70 72" stroke="#D2B48C" stroke-width="3" fill="none"/>
+                    <path d="M52 74 Q60 76 68 74" stroke="#D2B48C" stroke-width="2" fill="none"/>
+                    <!-- 입 -->
+                    <path d="M55 80 Q60 85 65 80" stroke="#8B4513" stroke-width="2" fill="none"/>
+                    <!-- 몸 (조끼) -->
+                    <rect x="35" y="95" width="50" height="70" rx="10" fill="#CD853F" stroke="#8B4513" stroke-width="3"/>
+                    <!-- 셔츠 -->
+                    <polygon points="45,100 75,100 70,95 50,95" fill="#F5F5DC" stroke="#8B4513" stroke-width="2"/>
+                    <rect x="40" y="100" width="40" height="65" fill="#F5F5DC" stroke="#8B4513" stroke-width="2"/>
+                    <!-- V넥 조끼 -->
+                    <polygon points="45,100 60,130 75,100 70,100 60,120 50,100" fill="#A0522D" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 바지 -->
+                    <rect x="35" y="155" width="50" height="40" rx="8" fill="#654321" stroke="#8B4513" stroke-width="3"/>
+                    <!-- 팔 -->
+                    <ellipse cx="25" cy="120" rx="8" ry="25" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <ellipse cx="95" cy="120" rx="8" ry="25" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 손 -->
+                    <circle cx="25" cy="140" r="8" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <circle cx="95" cy="140" r="8" fill="#F4C2A1" stroke="#8B4513" stroke-width="2"/>
+                    <!-- 지팡이 -->
+                    <line x1="100" y1="135" x2="110" y2="180" stroke="#8B4513" stroke-width="4"/>
+                    <circle cx="110" cy="130" r="4" fill="#8B4513"/>
+                </g>
+            </svg>
         </div>
         <div class="app-title">시니어 연금 계산기</div>
     </div>
@@ -677,7 +759,6 @@ def render_main_home():
     )
     
     st.markdown('</div>', unsafe_allow_html=True)  # main-container 닫기
-
 
 # 공통 설문 문항
 QUESTIONS = [
