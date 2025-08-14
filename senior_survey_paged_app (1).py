@@ -462,6 +462,42 @@ def get_fallback_recommendations(investment_amount, period, risk_level, target_m
     
     return sorted(result, key=lambda x: x['추천점수'], reverse=True)[:3]
 
+def _defaults_from_survey(answers: dict):
+    """설문 답변에서 기본 추천 입력치(투자금액/기간/리스크/목표월이자)를 뽑아 UI에 프리필"""
+    age    = int(float(answers.get('age', 65) or 65))
+    assets = float(answers.get('assets', 5000) or 5000)
+    income = float(answers.get('income', 200) or 200)
+    risk   = str(answers.get('risk', '위험중립형') or '위험중립형')
+
+    # 나이/자산으로 기본 투자금액/기간 가정
+    if age >= 70:
+        invest_amount = min(assets * 0.3, 3000)
+        period = 12
+    elif age >= 60:
+        invest_amount = min(assets * 0.4, 5000)
+        period = 24
+    else:
+        invest_amount = min(assets * 0.5, 8000)
+        period = 36
+
+    target_monthly = income * 0.1  # 소득의 10%를 목표 월이자(만원)로
+
+    # 리스크 5단계 → 3단계 매핑
+    risk_map = {
+        '안정형':'안정형', '안정추구형':'안정형',
+        '위험중립형':'위험중립형',
+        '적극투자형':'공격형', '공격투자형':'공격형'
+    }
+    risk3 = risk_map.get(risk, '위험중립형')
+
+    return {
+        "investment_amount": int(round(invest_amount)),
+        "period": int(period),
+        "risk_level": risk3,
+        "target_monthly": float(round(target_monthly, 1)),
+    }
+
+
 # 설문 기반 추천도 개선
 def get_survey_based_recommendations(user_answers):
     """설문 결과를 바탕으로 한 추천 (CSV 데이터 활용)"""
@@ -834,7 +870,13 @@ def render_main_page():
     
     with col2:
         if st.button("맞춤 상품\n추천", key="recommendation", use_container_width=True):
-            st.session_state.page = 'recommendation_hub'   # ← 허브로 이동
+            # 설문 완료 여부에 따라: 설문 완료 → 합친 화면, 미완료 → 설문으로
+            if st.session_state.answers:
+                st.session_state.page = 'survey_plus_custom'
+            else:
+                st.session_state.page = 'survey'
+                st.session_state.question_step = 1
+                st.session_state.answers = {}
             st.rerun()
     
     st.markdown('<div style="margin: 15px 0;"></div>', unsafe_allow_html=True)
@@ -1173,7 +1215,7 @@ def render_survey_result_page():
     
     with col1:
         if st.button("맞춤 상품 추천 보기", use_container_width=True):
-            st.session_state.page = 'recommendation'
+            st.session_state.page = 'survey_plus_custom'   # ← 여기!
             st.rerun()
     
     with col2:
@@ -1186,6 +1228,105 @@ def render_survey_result_page():
     if st.button("← 메인으로 돌아가기", use_container_width=True):
         st.session_state.page = 'main'
         st.rerun()
+def render_survey_plus_custom_page():
+    render_header("설문 + 맞춤 조건으로 추천")
+
+    if not st.session_state.answers:
+        st.warning("먼저 설문을 완료해주세요.")
+        if st.button("설문 하러 가기"):
+            st.session_state.page = 'survey'
+            st.rerun()
+        return
+
+    # 설문에서 기본값 추출
+    defaults = _defaults_from_survey(st.session_state.answers)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        investment_amount = st.number_input(
+            "투자금액 (만원)",
+            min_value=10, step=10,
+            value=int(defaults["investment_amount"])
+        )
+        risk_level = st.selectbox(
+            "리스크 허용도",
+            ["안정형","위험중립형","공격형"],
+            index=["안정형","위험중립형","공격형"].index(defaults["risk_level"])
+        )
+    with col2:
+        period = st.selectbox(
+            "투자 기간 (개월)",
+            [6,12,24,36],
+            index=[6,12,24,36].index(int(defaults["period"]))
+        )
+        target_monthly = st.number_input(
+            "목표 월이자 (만원)",
+            min_value=0.0, step=1.0,
+            value=float(defaults["target_monthly"])
+        )
+
+    st.markdown('<div style="margin: 8px 0 16px 0;"></div>', unsafe_allow_html=True)
+
+    if st.button("🔍 추천 받기", use_container_width=True):
+        with st.spinner("CSV에서 조건에 맞는 상품을 찾는 중..."):
+            recs = get_custom_recommendations_from_csv(
+                investment_amount, period, risk_level, target_monthly
+            )
+        if not recs:
+            # 비었으면 폴백 사용
+            recs = get_fallback_recommendations(investment_amount, period, risk_level, target_monthly)
+
+        st.session_state.spc_last_input = {
+            "investment_amount": investment_amount,
+            "period": period,
+            "risk_level": risk_level,
+            "target_monthly": target_monthly,
+        }
+        st.session_state.spc_recs = recs
+        st.rerun()
+
+    # 결과 표시
+    if "spc_recs" in st.session_state:
+        cond = st.session_state.get("spc_last_input", {})
+        st.caption(
+            f"검색 조건 · 투자금액 **{cond.get('investment_amount',0)}만원**, "
+            f"기간 **{cond.get('period',0)}개월**, 리스크 **{cond.get('risk_level','-')}**, "
+            f"목표 월이자 **{cond.get('target_monthly',0)}만원** · 소스: **CSV 기반**"
+        )
+        for i, p in enumerate(st.session_state.spc_recs, 1):
+            st.markdown(f"""
+            <div class="product-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h4 style="margin:0;color:#1F2937;">🏆 {i}. {p.get('상품명','-')}</h4>
+                <span style="background:#10B981;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;">
+                  {p.get('월수령액','-')}
+                </span>
+              </div>
+              <div style="color:#666;font-size:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div><strong>구분:</strong> {p.get('구분','-')}</div>
+                <div><strong>연수익률:</strong> {p.get('연수익률','-')}</div>
+                <div><strong>리스크:</strong> {p.get('리스크','-')}</div>
+                <div><strong>최소투자:</strong> {p.get('최소투자금액','-')}</div>
+                <div><strong>투자기간:</strong> {p.get('투자기간','-')}</div>
+                <div><strong>추천점수:</strong> {p.get('추천점수',0):.1f}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("조건 바꿔 다시 추천"):
+                st.session_state.pop("spc_recs", None)
+                st.rerun()
+        with c2:
+            if st.button("노후 시뮬레이션으로"):
+                st.session_state.page = 'simulation'
+                st.rerun()
+        with c3:
+            if st.button("메인으로"):
+                st.session_state.page = 'main'
+                st.rerun()
 
 # =================================
 # 연금 계산 페이지
@@ -1455,22 +1596,19 @@ def main():
         render_survey_page()
     elif st.session_state.page == 'survey_result':
         render_survey_result_page()
+    elif st.session_state.page == 'survey_plus_custom':   # ← 추가
+        render_survey_plus_custom_page()
     elif st.session_state.page == 'pension_input':
         render_pension_input_page()
     elif st.session_state.page == 'pension_result':
         render_pension_result_page()
-    elif st.session_state.page == 'recommendation_hub':        # ← 추가
-        render_recommendation_hub()
-    elif st.session_state.page == 'custom_recommendation':     # ← 추가
-        render_custom_recommendation_page()
-    elif st.session_state.page == 'custom_recommendation_result':  # ← 추가
-        render_custom_recommendation_result()
     elif st.session_state.page == 'recommendation':
-        render_recommendation_page()   # 원하면 삭제해도 됨(더 이상 사용 안 함)
+        render_recommendation_page()  # (원하면 유지/삭제 자유)
     elif st.session_state.page == 'simulation':
         render_simulation_page()
     elif st.session_state.page == 'phone_consultation':
         render_phone_consultation_page()
+
 
 
 if __name__ == "__main__":
