@@ -474,25 +474,21 @@ def render_main_screen():
             margin: 0 auto;
         }
         
-        .menu-button {
-            padding: 25px 30px;
-            border-radius: 20px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: block;
-            text-align: center;
-            font-size: 22px;
-            font-weight: 700;
-            color: white;
-            margin: 10px 0;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        .stButton > button {
+            width: 100% !important;
+            height: 80px !important;
+            border-radius: 20px !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+            border: none !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+            transition: all 0.2s ease !important;
+            white-space: pre-line !important;
         }
         
-        .menu-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        .stButton > button:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
         }
         
         .btn-survey {
