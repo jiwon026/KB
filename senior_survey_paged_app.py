@@ -232,6 +232,7 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     return out[cols]
 
 
+
 def recommend_fallback_split(user: dict) -> pd.DataFrame:
     # 기본키 채워 넣기 (혹시 누락되면)
     user = {
@@ -362,8 +363,8 @@ TABNET_TYPE_DESCRIPTIONS = {
 }
 DEFAULT_DISPLAY_TYPE = "균형형"
 
-def render_final_screen_clickable(display_type: str, rec_df: pd.DataFrame):
-    # 제목/설명(그대로 유지)
+def render_final_screen(display_type: str, rec_df: pd.DataFrame):
+    # TabNet 유형 우선 → 없으면 투자성향 → 폴백
     if display_type in TABNET_TYPE_DESCRIPTIONS:
         title = display_type
         desc  = TABNET_TYPE_DESCRIPTIONS[display_type]
@@ -374,58 +375,50 @@ def render_final_screen_clickable(display_type: str, rec_df: pd.DataFrame):
         title = DEFAULT_DISPLAY_TYPE
         desc  = TABNET_TYPE_DESCRIPTIONS.get(DEFAULT_DISPLAY_TYPE, "")
 
-    # 카드형 Expander 스타일
     st.markdown("""
     <style>
-    .card-wrap{ position:relative; }
-    .card-wrap .overlay-btn > div > button{
-      position:absolute; inset:0;  /* 카드를 전부 덮도록 */
-      opacity:0;                    /* 보이지 않게 */
-      cursor:pointer;
-    }
+      .hero { font-size: 38px; font-weight: 800; margin: 4px 0 8px 0; }
+      .desc { font-size: 16px; opacity: 0.9; margin-bottom: 18px; }
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .card {
+        border: 2px solid #eaeaea; border-radius: 18px; padding: 16px 14px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06); background: #fff;
+      }
+      .badge {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:28px; height:28px; border-radius:50%; color:#fff; font-weight:700;
+        margin-right:8px;
+      }
+      .b1{ background:#ff5a5a; } .b2{ background:#7c4dff; } .b3{ background:#10b981; }
+      .pname{ font-size:17px; font-weight:700; margin:6px 0 10px 0; }
+      .meta{ font-size:14px; line-height:1.5; }
+      .k { font-weight:700; }
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f"## {title}")
-    st.caption(desc)
+    st.markdown(f'<div class="hero">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="desc">• {desc}</div>', unsafe_allow_html=True)
 
+    colors = ["b1", "b2", "b3"]
     items = rec_df.head(3).to_dict(orient="records")
-    cols = st.columns(3)
-    for i, (col, r) in enumerate(zip(cols, items), start=1):
-        with col:
-            # ① 카드 HTML (그대로)
-            st.markdown('<div class="card-wrap">', unsafe_allow_html=True)
-            st.markdown(
-                f'''
-                <div class="card">
-                  <div><span class="badge b{i}">{i}</span><span class="pname">{r.get("상품명","-")}</span></div>
-                  <div class="meta"><span class="k">월 예상수익</span> {r.get("월예상수익금(만원)","-")}만원</div>
-                  <div class="meta"><span class="k">리스크</span> {r.get("리스크","-")}</div>
-                </div>
-                ''', unsafe_allow_html=True
-            )
-            # ② 카드 전체를 덮는 투명 버튼
-            with st.container():
-                st.markdown('<div class="overlay-btn">', unsafe_allow_html=True)
-                if st.button(" ", key=f"card_click_{i}"):  # 라벨은 공백
-                    st.session_state["selected_product"] = r
-                st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 상세
-    sel = st.session_state.get("selected_product")
-    if sel:
-        st.markdown("---")
-        st.subheader("📋 상품 상세")
-        rows = [
-            ("상품명", sel.get("상품명", "-")),
-            ("월예상수익금(만원)", sel.get("월예상수익금(만원)", "-")),
-            ("예상수익률", (sel.get("예상수익률(연)") 
-                         or f"{float(sel.get('예상수익률', 0.0))*100:.2f}%")),
-            ("투자기간", f"{sel.get('투자기간(개월)', sel.get('권장투자기간','-'))}개월"),
-            ("최소투자금액", sel.get("최소투자금액", "-")),
-        ]
-        st.table(pd.DataFrame(rows, columns=["항목","값"]))
+
+    cards = []
+    for i, r in enumerate(items, start=1):
+        cname = colors[i-1 if i-1 < len(colors) else -1]
+        name = str(r.get("상품명", "-"))
+        mret = r.get("월예상수익금(만원)", "-")
+        risk = r.get("리스크", "-")
+        card_html = (
+            f'<div class="card">'
+            f'<div><span class="badge {cname}">{i}</span><span class="pname">{name}</span></div>'
+            f'<div class="meta"><span class="k">월 예상수익</span> {mret}만원</div>'
+            f'<div class="meta"><span class="k">리스크</span> {risk}</div>'
+            f'</div>'
+        )
+        cards.append(card_html)
+
+    cards_html = '<div class="cards">' + ''.join(cards) + '</div>'
+    st.markdown(cards_html, unsafe_allow_html=True)
 
 
 
@@ -677,6 +670,7 @@ elif ss.flow == "recommend":
             st.session_state.pop("selected_product", None)   # ★ 상세 선택 초기화
             st.rerun()
 
+
     # 3) 추천 결과 (카드 + 근거만)
     if st.session_state.get("show_reco") and ("rec_df" in st.session_state):
         rec_df       = st.session_state["rec_df"]
@@ -684,7 +678,7 @@ elif ss.flow == "recommend":
         risk_choice  = st.session_state.get("risk_choice", "위험중립형")
 
         render_final_screen_clickable(display_type, rec_df)
-        # === 추천 카드 아래 '자세히 보기' 버튼들 ===
+        # === 카드 아래 '자세히 보기' 버튼들 ===
         rec_records = rec_df.head(3).to_dict(orient="records")
         cols = st.columns(len(rec_records) if rec_records else 1)
         
@@ -700,13 +694,19 @@ elif ss.flow == "recommend":
         if sel:
             st.markdown("---")
             st.subheader("📋 상품 상세")
+            # 예상수익률 표시는 (예상수익률(연) 있으면 그걸, 없으면 숫자를 %로 변환)
+            rate_txt = sel.get("예상수익률(연)")
+            if not rate_txt:
+                try:
+                    rate_txt = f"{float(sel.get('예상수익률', 0.0))*100:.2f}%"
+                except Exception:
+                    rate_txt = "-"
         
             rows = [
                 ("상품명", sel.get("상품명", "-")),
                 ("월예상수익금(만원)", sel.get("월예상수익금(만원)", "-")),
-                ("예상수익률", sel.get("예상수익률(연)", sel.get("예상수익률", "-"))),
-                ("투자성향", sel.get("투자성향", "-")),
-                ("투자기간", f"{sel.get('투자기간(개월)', '-') }개월"),
+                ("예상수익률", rate_txt),
+                ("투자기간", f"{sel.get('투자기간(개월)', sel.get('권장투자기간','-'))}개월"),
                 ("최소투자금액", sel.get("최소투자금액", "-")),
             ]
             st.table(pd.DataFrame(rows, columns=["항목", "값"]))
@@ -720,6 +720,7 @@ elif ss.flow == "recommend":
                 if st.button("시뮬레이션으로 이동", key="go_sim_from_detail"):
                     ss.flow = "sim"
                     st.rerun()
+
 
 
 
