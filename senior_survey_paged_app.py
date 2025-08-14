@@ -456,8 +456,11 @@ def render_main_home():
     <style>
       /* 전체 페이지 배경 */
       .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      }
+        max-width: 350px;
+        margin: 0 auto;
+        background-color: #f8f9fa;
+        padding: 20px;
+    }
       
       /* 메인 컨테이너 카드 */
       .main-container {
@@ -504,24 +507,22 @@ def render_main_home():
       }
       
       /* 메뉴 버튼들 */
-      .menu-section {
-        margin-top: 2rem;
-      }
-      
-      .menu-button {
-        width: 100%;
-        padding: 22px 24px;
-        margin: 12px 0;
-        border: none;
-        border-radius: 16px;
-        font-size: 22px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-align: center;
-        display: block;
-        text-decoration: none;
-      }
+      .stButton > button {
+        width: 100% !important;
+        height: 80px !important;
+        border-radius: 20px !important;
+        font-size: 18px !important;
+        font-weight: bold !important;
+        border: none !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+        transition: all 0.2s ease !important;
+        white-space: pre-line !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    }
       
       /* 각 버튼별 색상 */
       .btn-type {
