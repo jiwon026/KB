@@ -381,6 +381,7 @@ def render_main_page():
 # =================================
 # 전화 상담 페이지
 # =================================
+# 전화 상담 페이지 함수 수정
 def render_phone_consultation_page():
     render_header("전화 상담")
     
@@ -393,36 +394,34 @@ def render_phone_consultation_page():
     </div>
     """, unsafe_allow_html=True)
     
+    # 상담센터 정보를 일반 마크다운으로 변경
+    st.markdown("### 📞 KB 시니어 연금 상담센터")
+    
+    # 전화번호 표시
     st.markdown("""
-    <div class="consultation-card">
-        <h3 style="color: #4F46E5; margin-bottom: 15px;">📞 KB 시니어 연금 상담센터</h3>
-        
-        <div style="margin: 15px 0;">
-            <strong style="color: #1F2937;">상담 전화번호:</strong>
-            <span style="font-size: 24px; font-weight: bold; color: #4F46E5; margin-left: 10px;">1588-9999</span>
-        </div>
-        
-        <div style="margin: 15px 0;">
-            <strong style="color: #1F2937;">상담 시간:</strong>
-            <ul style="margin: 10px 0; padding-left: 20px;">
-                <li>평일: 오전 9시 ~ 오후 6시</li>
-                <li>토요일: 오전 9시 ~ 오후 1시</li>
-                <li>일요일 및 공휴일 휴무</li>
-            </ul>
-        </div>
-        
-        <div style="margin: 15px 0;">
-            <strong style="color: #1F2937;">상담 가능 내용:</strong>
-            <ul style="margin: 10px 0; padding-left: 20px;">
-                <li>🏦 연금 상품 상세 안내</li>
-                <li>📝 가입 절차 및 필요 서류</li>
-                <li>💰 수령 방법 및 시기</li>
-                <li>💸 세제 혜택 안내</li>
-                <li>📊 개인 맞춤 포트폴리오 구성</li>
-            </ul>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    **상담 전화번호:** 
+    ## 1588-9999
+    """)
+    
+    # 상담 시간
+    st.markdown("""
+    **상담 시간:**
+    - 평일: 오전 9시 ~ 오후 6시
+    - 토요일: 오전 9시 ~ 오후 1시  
+    - 일요일 및 공휴일 휴무
+    """)
+    
+    # 상담 가능 내용
+    st.markdown("""
+    **상담 가능 내용:**
+    - 🏦 연금 상품 상세 안내
+    - 📝 가입 절차 및 필요 서류
+    - 💰 수령 방법 및 시기
+    - 💸 세제 혜택 안내
+    - 📊 개인 맞춤 포트폴리오 구성
+    """)
+    
+    st.markdown("---")
     
     st.markdown("### 📋 상담 예약 신청")
     st.markdown("아래 정보를 입력하시면 전문 상담사가 먼저 연락드립니다.")
