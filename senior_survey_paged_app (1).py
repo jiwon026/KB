@@ -1141,34 +1141,45 @@ def render_survey_page():
             st.session_state.page = 'main'
             st.rerun()
 
-def analyze_user_type():
-    """사용자 유형 분석"""
-    answers = st.session_state.answers
-    
+def _to_int(x, default):
     try:
-        age = int(answers.get('age', 65))
-        assets = float(answers.get('assets', 5000))
-        pension = float(answers.get('pension', 100))
-        income = float(answers.get('income', 200))
-        living_cost = float(answers.get('living_cost', 150))
-        risk = answers.get('risk', '안정형')
-        
-        # 간단한 유형 분류 로직
-        if assets > 10000 and income > 300:
-            user_type = "자산운용형"
-        elif living_cost > income + pension:
-            user_type = "위험취약형"
-        elif risk in ['적극투자형', '공격투자형']:
-            user_type = "적극투자형"
-        elif assets < 3000 and pension < 80:
-            user_type = "위험취약형"
-        else:
-            user_type = "균형형"
-        
-        st.session_state.user_type = user_type
-        
-    except:
-        st.session_state.user_type = "균형형"
+        if x in (None, ""): return default
+        return int(float(str(x).replace(",", "").strip()))
+    except Exception:
+        return default
+
+def _to_float(x, default):
+    try:
+        if x in (None, ""): return default
+        return float(str(x).replace(",", "").strip())
+    except Exception:
+        return default
+
+def analyze_user_type():
+    """문자/빈값/콤마 포함 입력도 안전하게 파싱해서 유형 분류"""
+    a = st.session_state.get('answers', {})
+
+    age         = _to_int(a.get('age'), 65)
+    assets      = _to_float(a.get('assets'), 5000)
+    pension     = _to_float(a.get('pension'), 100)
+    income      = _to_float(a.get('income'), 200)
+    living_cost = _to_float(a.get('living_cost'), 150)
+    risk        = (a.get('risk') or '안정형').strip()
+
+    # 간단 분류 로직(원래 쓰던 기준 그대로)
+    if assets > 10000 and income > 300:
+        user_type = "자산운용형"
+    elif living_cost > income + pension:
+        user_type = "위험취약형"
+    elif risk in ['적극투자형', '공격투자형']:
+        user_type = "적극투자형"
+    elif assets < 3000 and pension < 80:
+        user_type = "위험취약형"
+    else:
+        user_type = "균형형"
+
+    st.session_state.user_type = user_type
+
 
 # =================================
 # 설문 결과 페이지
