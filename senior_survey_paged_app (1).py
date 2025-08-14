@@ -12,7 +12,35 @@ try:
 except Exception as e:
     USE_FAISS = False
     from sklearn.neighbors import NearestNeighbors
+# FAISS 인덱싱 함수들
+def build_index(X: np.ndarray):
+    """FAISS 또는 sklearn으로 인덱스 구축"""
+    if USE_FAISS and X.shape[0] > 0:
+        try:
+            dim = X.shape[1]
+            index = faiss.IndexFlatL2(dim)
+            index.add(X)
+            return ('faiss', index)
+        except:
+            pass
+    
+    # sklearn fallback
+    from sklearn.neighbors import NearestNeighbors
+    nn = NearestNeighbors(n_neighbors=min(10, X.shape[0]), metric='euclidean')
+    nn.fit(X)
+    return ('sklearn', nn)
 
+def index_search(index_info, query: np.ndarray, k: int):
+    """인덱스에서 k개 최근접 검색"""
+    index_type, index_obj = index_info
+    
+    if index_type == 'faiss':
+        distances, indices = index_obj.search(query, k)
+        return distances[0], indices[0]
+    else:  # sklearn
+        distances, indices = index_obj.kneighbors(query, n_neighbors=k)
+        return distances[0], indices[0]
+        
 # 페이지 설정
 st.set_page_config(
     page_title="노후愛",
@@ -257,43 +285,357 @@ def load_fund_csv():
 # 모델 로딩
 survey_model, survey_encoder, reg_model, type_model = load_models()
 
-# 추천 시스템 함수들 (기존 코드 간소화)
-def simple_recommend(user_data):
-    """간단한 규칙 기반 추천 - 월 수령액 포함"""
-    age = user_data.get('age', 65)
-    assets = user_data.get('assets', 5000)
-    risk = user_data.get('risk', '안정형')
+def get_custom_recommendations_from_csv(investment_amount, period, risk_level, target_monthly):
+    """실제 CSV 데이터에서 조건에 맞는 상품 추천"""
     
-    recommendations = []
+    try:
+        # CSV 데이터 로딩 및 전처리
+        dep_raw = load_deposit_csv()
+        fun_raw = load_fund_csv()
+        
+        dep = preprocess_products(dep_raw, "예·적금")
+        fun = preprocess_products(fun_raw, "펀드")
+        
+        # 전체 상품 통합
+        all_products = pd.concat([dep, fun], ignore_index=True)
+        
+        if all_products.empty:
+            return []
+        
+        # 사용자 조건 딕셔너리
+        user_conditions = {
+            '투자금액': investment_amount,
+            '투자기간': period, 
+            '투자성향': risk_level,
+            '목표월이자': target_monthly
+        }
+        
+        # 규칙 기반 필터링
+        filtered_products = rule_based_filter(all_products, user_conditions)
+        
+        if filtered_products.empty:
+            return []
+        
+        # 추천 결과 생성
+        recommendations = recommend_fallback_split(user_conditions)
+        
+        if recommendations.empty or '메시지' in recommendations.columns:
+            return []
+        
+        # 결과 포맷 변환
+        result = []
+        for _, row in recommendations.head(5).iterrows():
+            monthly_return = row.get('월예상수익금(만원)', 0)
+            annual_rate = row.get('예상수익률(연)', '0%')
+            
+            result.append({
+                '상품명': row.get('상품명', '상품명 없음'),
+                '구분': row.get('구분', '기타'),
+                '월수령액': f"{monthly_return:.1f}만원",
+                '연수익률': annual_rate,
+                '리스크': row.get('리스크', '중간'),
+                '최소투자금액': f"{row.get('최소투자금액', 0)}만원",
+                '투자기간': f"{row.get('투자기간(개월)', period)}개월",
+                '추천점수': max(0, 100 - abs(monthly_return - target_monthly) * 2)  # 목표 월이자 대비 점수
+            })
+        
+        return result
+        
+    except Exception as e:
+        st.error(f"추천 시스템 오류: {e}")
+        # 폴백: 기본 추천
+        return get_fallback_recommendations(investment_amount, period, risk_level, target_monthly)
+def get_fallback_recommendations(investment_amount, period, risk_level, target_monthly):
+    """CSV 로딩 실패시 폴백 추천"""
+    base_products = {
+        '안정형': [
+            {'상품명': 'KB 안심정기예금', '기본수익률': 3.2, '최소투자': 100},
+            {'상품명': 'KB 시니어적금', '기본수익률': 3.5, '최소투자': 50},
+            {'상품명': 'KB 연금저축예금', '기본수익률': 4.1, '최소투자': 300},
+        ],
+        '위험중립형': [
+            {'상품명': 'KB 균형형펀드', '기본수익률': 5.5, '최소투자': 100},
+            {'상품명': 'KB 혼합자산펀드', '기본수익률': 6.2, '최소투자': 200},
+            {'상품명': 'KB 안정성장펀드', '기본수익률': 5.8, '최소투자': 300},
+        ],
+        '공격형': [
+            {'상품명': 'KB 성장주펀드', '기본수익률': 8.1, '최소투자': 200},
+            {'상품명': 'KB 테크성장펀드', '기본수익률': 9.3, '최소투자': 500},
+            {'상품명': 'KB 글로벌성장펀드', '기본수익률': 7.8, '최소투자': 300},
+        ]
+    }
     
-    if risk == '안정형':
-        recommendations = [
-            {'상품명': 'KB 안심적금', '예상수익률': '3.2%', '월수령액': '15만원', '리스크': '낮음', '최소투자금액': '100만원'},
-            {'상품명': 'KB 시니어예금', '예상수익률': '2.8%', '월수령액': '23만원', '리스크': '낮음', '최소투자금액': '500만원'},
-            {'상품명': 'KB 연금저축', '예상수익률': '4.1%', '월수령액': '34만원', '리스크': '낮음', '최소투자금액': '1000만원'}
-        ]
-    elif risk == '위험중립형':
-        recommendations = [
-            {'상품명': 'KB 혼합형펀드', '예상수익률': '5.5%', '월수령액': '28만원', '리스크': '중간', '최소투자금액': '500만원'},
-            {'상품명': 'KB 균형투자', '예상수익률': '4.8%', '월수령액': '18만원', '리스크': '중간', '최소투자금액': '300만원'},
-            {'상품명': 'KB 안정성장', '예상수익률': '6.2%', '월수령액': '52만원', '리스크': '중간', '최소투자금액': '1000만원'}
-        ]
-    else:  # 적극투자형
-        recommendations = [
-            {'상품명': 'KB 성장주펀드', '예상수익률': '8.1%', '월수령액': '67만원', '리스크': '높음', '최소투자금액': '1000만원'},
-            {'상품명': 'KB 글로벌투자', '예상수익률': '7.5%', '월수령액': '38만원', '리스크': '높음', '최소투자금액': '500만원'},
-            {'상품명': 'KB 테크펀드', '예상수익률': '9.3%', '월수령액': '155만원', '리스크': '높음', '최소투자금액': '2000만원'}
-        ]
+    products = base_products.get(risk_level, base_products['위험중립형'])
+    result = []
     
-    return recommendations
+    for product in products:
+        if investment_amount >= product['최소투자']:
+            annual_return = investment_amount * (product['기본수익률'] / 100)
+            monthly_return = annual_return / 12
+            
+            result.append({
+                '상품명': product['상품명'],
+                '구분': '예·적금' if '예금' in product['상품명'] or '적금' in product['상품명'] else '펀드',
+                '월수령액': f"{monthly_return:.1f}만원",
+                '연수익률': f"{product['기본수익률']:.1f}%",
+                '리스크': risk_level,
+                '최소투자금액': f"{product['최소투자']}만원",
+                '투자기간': f"{period}개월",
+                '추천점수': max(0, 100 - abs(monthly_return - target_monthly) * 2)
+            })
+    
+    return sorted(result, key=lambda x: x['추천점수'], reverse=True)[:3]
 
-def calculate_pension_estimate(monthly_income, years):
-    """간단한 연금 계산"""
-    base_amount = monthly_income * 0.015 * years
-    if base_amount > 150:
-        return min(base_amount, 200)  # 최대 200만원
-    return max(base_amount, 30)  # 최소 30만원
+# 설문 기반 추천도 개선
+def get_survey_based_recommendations(user_answers):
+    """설문 결과를 바탕으로 한 추천 (CSV 데이터 활용)"""
+    try:
+        # 설문 답변을 추천 조건으로 변환
+        age = int(user_answers.get('age', 65))
+        assets = float(user_answers.get('assets', 5000))
+        risk = user_answers.get('risk', '안정형')
+        income = float(user_answers.get('income', 200))
+        
+        # 리스크 성향 매핑
+        risk_mapping = {
+            '안정형': '안정형',
+            '안정추구형': '안정형', 
+            '위험중립형': '위험중립형',
+            '적극투자형': '공격형',
+            '공격투자형': '공격형'
+        }
+        
+        mapped_risk = risk_mapping.get(risk, '위험중립형')
+        
+        # 나이와 자산에 따른 추천 투자금액/기간 결정
+        if age >= 70:
+            invest_amount = min(assets * 0.3, 3000)  # 보수적
+            invest_period = 12
+        elif age >= 60:
+            invest_amount = min(assets * 0.4, 5000)
+            invest_period = 24
+        else:
+            invest_amount = min(assets * 0.5, 8000)
+            invest_period = 36
+            
+        target_monthly = income * 0.1  # 소득의 10%를 목표 월수익
+        
+        # CSV 기반 추천 실행
+        recommendations = get_custom_recommendations_from_csv(
+            invest_amount, invest_period, mapped_risk, target_monthly
+        )
+        
+        return recommendations
+        
+    except Exception as e:
+        st.error(f"설문 기반 추천 오류: {e}")
+        # 기본 추천으로 폴백
+        return [
+            {'상품명': 'KB 시니어 안심예금', '월수령액': '25만원', '연수익률': '3.2%', 
+             '리스크': '낮음', '최소투자금액': '500만원', '구분': '예·적금'},
+            {'상품명': 'KB 균형투자펀드', '월수령액': '42만원', '연수익률': '5.5%', 
+             '리스크': '중간', '최소투자금액': '1000만원', '구분': '펀드'},
+        ]
 
+
+# 맞춤 추천 입력 페이지 (업데이트)
+def render_custom_recommendation_page():
+    render_header("맞춤 투자 조건 입력")
+    
+    st.markdown("""
+    <div style="text-align: center; margin: 20px 0; color: #666;">
+        원하시는 투자 조건을 입력하시면<br>실제 금융상품 데이터에서 가장 적합한 상품을 추천해드립니다.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # CSV 데이터 로딩 상태 확인
+    try:
+        dep_raw = load_deposit_csv()
+        fun_raw = load_fund_csv()
+        data_status = f"✅ 상품 데이터 로딩 완료 (예·적금: {len(dep_raw)}개, 펀드: {len(fun_raw)}개)"
+        st.success(data_status)
+    except Exception as e:
+        st.warning(f"⚠️ 상품 데이터 로딩 문제: {e} (기본 상품으로 추천)")
+    
+    # 투자 조건 입력
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        investment_amount = st.number_input(
+            "투자금액 (만원)", 
+            min_value=50, 
+            value=1000, 
+            step=50,
+            help="투자하실 금액을 입력해주세요"
+        )
+        
+        risk_level = st.selectbox(
+            "리스크 허용도",
+            ["안정형", "위험중립형", "공격형"],
+            help="투자 위험에 대한 성향을 선택해주세요"
+        )
+    
+    with col2:
+        period = st.selectbox(
+            "투자 기간 (개월)",
+            [6, 12, 24, 36],
+            index=1,
+            help="투자 유지 기간을 선택해주세요"
+        )
+        
+        target_monthly = st.number_input(
+            "목표 월이자 (만원)",
+            min_value=0,
+            value=30,
+            step=5,
+            help="매월 받고 싶은 이자 금액을 입력해주세요"
+        )
+    
+    st.markdown('<div style="margin: 30px 0;"></div>', unsafe_allow_html=True)
+    
+    if st.button("🔍 맞춤 상품 찾기", use_container_width=True):
+        with st.spinner('실제 금융상품 데이터에서 최적 상품을 찾는 중...'):
+            # CSV 데이터 기반 추천
+            recommendations = get_custom_recommendations_from_csv(
+                investment_amount, period, risk_level, target_monthly
+            )
+        
+        if recommendations:
+            st.session_state.custom_recommendations = recommendations
+            st.session_state.search_conditions = {
+                'investment_amount': investment_amount,
+                'period': period, 
+                'risk_level': risk_level,
+                'target_monthly': target_monthly
+            }
+            st.session_state.page = 'custom_recommendation_result'
+            st.rerun()
+        else:
+            st.error("조건에 맞는 상품을 찾을 수 없습니다. 조건을 다시 설정해보세요.")
+    
+    if st.button("← 메인으로", key="custom_rec_back"):
+        st.session_state.page = 'main'
+        st.rerun()
+
+
+# render_recommendation_page도 업데이트 (설문 기반 추천 개선)
+def render_recommendation_page():
+    render_header("맞춤 상품 추천")
+    
+    st.markdown("""
+    <div style="text-align: center; margin: 20px 0; color: #666;">
+        원하시는 추천 방식을 선택해주세요
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    # 방식 1: 설문 기반 추천
+    with col1:
+        if st.button("📋 설문 기반 추천\n(간편 방식)", use_container_width=True):
+            if not st.session_state.answers:
+                st.warning("먼저 설문조사를 완료해주세요.")
+                if st.button("설문조사 하러 가기"):
+                    st.session_state.page = 'survey'
+                    st.session_state.question_step = 1
+                    st.session_state.answers = {}
+                    st.rerun()
+                return
+            
+            st.session_state.recommendation_mode = 'survey_based'
+            st.rerun()
+    
+    # 방식 2: 맞춤 조건 입력
+    with col2:
+        if st.button("🎯 맞춤 조건 입력\n(상세 방식)", use_container_width=True):
+            st.session_state.page = 'custom_recommendation'
+            st.rerun()
+    
+    # 설문 기반 추천 결과 표시
+    if st.session_state.get('recommendation_mode') == 'survey_based':
+        user_type = st.session_state.user_type or "균형형"
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin: 20px 0;">
+            <h3>🎯 {user_type} 맞춤 추천 (설문 기반)</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.spinner('실제 상품 데이터에서 최적 상품을 분석 중...'):
+            # CSV 기반 설문 추천
+            recommendations = get_survey_based_recommendations(st.session_state.answers)
+        
+        if not recommendations:
+            st.error("추천 가능한 상품을 찾을 수 없습니다.")
+            return
+            
+        for i, product in enumerate(recommendations, 1):
+            # 추천점수에 따른 배지
+            score = product.get('추천점수', 0)
+            if score >= 90:
+                badge_color, badge_text = "#10B981", "최적"
+            elif score >= 70:
+                badge_color, badge_text = "#3B82F6", "추천"  
+            else:
+                badge_color, badge_text = "#F59E0B", "적합"
+            
+            st.markdown(f"""
+            <div class="product-card" style="position: relative;">
+                <div style="position: absolute; top: 15px; right: 15px;">
+                    <span style="background: {badge_color}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">{badge_text}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; margin-right: 60px;">
+                    <h4 style="margin: 0; color: #1F2937;">🏆 {i}. {product['상품명']}</h4>
+                    <span style="background: #10B981; color: white; padding: 8px 12px; border-radius: 8px; font-size: 16px; font-weight: bold;">{product['월수령액']}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: #666; font-size: 14px;">
+                    <div><strong>구분:</strong> {product['구분']}</div>
+                    <div><strong>연수익률:</strong> {product['연수익률']}</div>
+                    <div><strong>리스크:</strong> {product['리스크']}</div>
+                    <div><strong>최소투자:</strong> {product['최소투자금액']}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # 하단 버튼들
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🎯 조건 입력해서 다시 추천받기"):
+                st.session_state.page = 'custom_recommendation'
+                st.session_state.recommendation_mode = None
+                st.rerun()
+        
+        with col2:
+            if st.button("📞 전문가 상담받기"):
+                st.session_state.page = 'phone_consultation'
+                st.rerun()
+        
+        if st.button("← 추천 방식 다시 선택"):
+            st.session_state.recommendation_mode = None
+            st.rerun()
+    
+    # 하단 공통 서비스 버튼들
+    if not st.session_state.get('recommendation_mode'):
+        st.markdown('<div style="margin: 40px 0;"></div>', unsafe_allow_html=True)
+        st.markdown("### 🔗 다른 서비스도 이용해보세요")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📊 노후 시뮬레이션 보기"):
+                st.session_state.page = 'simulation'
+                st.rerun()
+        
+        with col2:
+            if st.button("💰 연금 계산하기"):
+                st.session_state.page = 'pension_input'
+                st.rerun()
+        
+        if st.button("← 메인으로 돌아가기"):
+            st.session_state.page = 'main'
+            st.session_state.recommendation_mode = None
+            st.rerun()
+            
 # =================================
 # 세션 상태 초기화
 # =================================
