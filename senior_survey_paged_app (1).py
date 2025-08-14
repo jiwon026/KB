@@ -513,6 +513,68 @@ def get_survey_based_recommendations(user_answers):
              '리스크': '중간', '최소투자금액': '1000만원', '구분': '펀드'},
         ]
 
+def render_custom_recommendation_result():
+    render_header("맞춤 추천 결과")
+
+    recs = st.session_state.get("custom_recommendations", [])
+    cond = st.session_state.get("search_conditions", {})
+
+    if not recs:
+        st.warning("결과가 없습니다. 조건을 조정해 다시 시도해 주세요.")
+        if st.button("← 조건 다시 입력"):
+            st.session_state.page = 'custom_recommendation'
+            st.rerun()
+        return
+
+    # 검색 조건 요약
+    st.caption(
+        f"검색 조건 · 투자금액 **{cond.get('investment_amount',0)}만원**, "
+        f"기간 **{cond.get('period',0)}개월**, 리스크 **{cond.get('risk_level','-')}**, "
+        f"목표 월이자 **{cond.get('target_monthly',0)}만원**"
+    )
+    st.caption("추천 소스: **CSV 기반**")
+
+    # 카드 렌더
+    for i, product in enumerate(recs, 1):
+        badge = "최적" if product.get('추천점수',0) >= 90 else ("추천" if product.get('추천점수',0) >= 70 else "적합")
+        st.markdown(f"""
+        <div class="product-card" style="position: relative;">
+            <div style="position: absolute; top: 15px; right: 15px;">
+                <span style="background: #3B82F6; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">{badge}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; margin-right:60px;">
+                <h4 style="margin:0; color:#1F2937;">🏆 {i}. {product.get('상품명','-')}</h4>
+                <span style="background:#10B981; color:white; padding:8px 12px; border-radius:8px; font-size:16px; font-weight:bold;">
+                    {product.get('월수령액','-')}
+                </span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; color:#666; font-size:14px;">
+                <div><strong>구분:</strong> {product.get('구분','-')}</div>
+                <div><strong>연수익률:</strong> {product.get('연수익률','-')}</div>
+                <div><strong>리스크:</strong> {product.get('리스크','-')}</div>
+                <div><strong>최소투자:</strong> {product.get('최소투자금액','-')}</div>
+                <div><strong>투자기간:</strong> {product.get('투자기간','-')}</div>
+                <div><strong>추천점수:</strong> {product.get('추천점수',0):.1f}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("조건 바꿔 다시 추천"):
+            st.session_state.page = 'custom_recommendation'
+            st.rerun()
+    with col2:
+        if st.button("설문 기반으로 보기"):
+            st.session_state.recommendation_mode = 'survey_based'
+            st.session_state.page = 'recommendation_hub'
+            st.rerun()
+    with col3:
+        if st.button("← 메인으로"):
+            st.session_state.page = 'main'
+            st.rerun()
+
 
 # 맞춤 추천 입력 페이지 (업데이트)
 def render_custom_recommendation_page():
@@ -772,12 +834,7 @@ def render_main_page():
     
     with col2:
         if st.button("맞춤 상품\n추천", key="recommendation", use_container_width=True):
-            if st.session_state.answers:
-                st.session_state.page = 'recommendation'
-            else:
-                st.session_state.page = 'survey'
-                st.session_state.question_step = 1
-                st.session_state.answers = {}
+            st.session_state.page = 'recommendation_hub'   # ← 허브로 이동
             st.rerun()
     
     st.markdown('<div style="margin: 15px 0;"></div>', unsafe_allow_html=True)
@@ -1402,12 +1459,19 @@ def main():
         render_pension_input_page()
     elif st.session_state.page == 'pension_result':
         render_pension_result_page()
+    elif st.session_state.page == 'recommendation_hub':        # ← 추가
+        render_recommendation_hub()
+    elif st.session_state.page == 'custom_recommendation':     # ← 추가
+        render_custom_recommendation_page()
+    elif st.session_state.page == 'custom_recommendation_result':  # ← 추가
+        render_custom_recommendation_result()
     elif st.session_state.page == 'recommendation':
-        render_recommendation_page()
+        render_recommendation_page()   # 원하면 삭제해도 됨(더 이상 사용 안 함)
     elif st.session_state.page == 'simulation':
         render_simulation_page()
     elif st.session_state.page == 'phone_consultation':
         render_phone_consultation_page()
+
 
 if __name__ == "__main__":
     main()
