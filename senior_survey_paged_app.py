@@ -451,80 +451,231 @@ def reset_app_state(go: str | None = None):
 
 # ===== 메인 화면 (이미지처럼) =====
 def render_main_home():
-    # 스타일
+    # 커스텀 CSS 스타일
     st.markdown("""
     <style>
-      .home-card{
-        max-width: 360px; margin: 0 auto; padding: 20px 18px;
-        background:#ffffff; border:1px solid #eee; border-radius:24px;
-        box-shadow:0 10px 30px rgba(0,0,0,.06);
+      /* 전체 페이지 배경 */
+      .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       }
-      .brand { display:flex; align-items:center; gap:10px; }
-      .brand .kb { font-weight:900; font-size:28px; letter-spacing:1px; }
-      .title { font-weight:900; font-size:26px; margin:8px 0 16px; }
-      .menu .stButton>button{
-        width:100%; height:56px; border-radius:18px; font-size:18px; font-weight:800;
-        border:0;
+      
+      /* 메인 컨테이너 카드 */
+      .main-container {
+        max-width: 400px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        text-align: center;
       }
-      .menu .stButton:nth-child(1)>button{ background:#FFE4B5; color:#533c00; } /* 베이지 */
-      .menu .stButton:nth-child(2)>button{ background:#FFD6D1; color:#7a1b13; } /* 코랄 */
-      .menu .stButton:nth-child(3)>button{ background:#D9F7E7; color:#0f5132; } /* 민트 */
-      .menu .stButton:nth-child(4)>button{ background:#D7E3FF; color:#0f2b7e; } /* 하늘 */
-      .menu .stButton:nth-child(5)>button{ background:#E9D8FD; color:#3b0764; } /* 라일락 */
-      .menu .stButton{ margin-bottom:12px; }
-      .caption{ font-size:12px; color:#666; text-align:center; margin-top:6px; }
+      
+      /* KB 로고 및 브랜드 */
+      .brand-section {
+        margin-bottom: 1.5rem;
+      }
+      
+      .kb-logo {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #4A90E2;
+        color: white;
+        font-weight: 900;
+        font-size: 24px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        margin-right: 12px;
+      }
+      
+      .elderly-icons {
+        font-size: 32px;
+        margin-left: 8px;
+      }
+      
+      .app-title {
+        font-size: 28px;
+        font-weight: 800;
+        color: #2c3e50;
+        margin: 1rem 0;
+        line-height: 1.2;
+      }
+      
+      /* 메뉴 버튼들 */
+      .menu-section {
+        margin-top: 2rem;
+      }
+      
+      .menu-button {
+        width: 100%;
+        padding: 16px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 16px;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: center;
+        display: block;
+        text-decoration: none;
+      }
+      
+      /* 각 버튼별 색상 */
+      .btn-type {
+        background: #FFE4B5;
+        color: #8B4513;
+      }
+      
+      .btn-calc {
+        background: #E6F3FF;
+        color: #0066CC;
+      }
+      
+      .btn-sim {
+        background: #E8F5E8;
+        color: #2E8B57;
+      }
+      
+      .btn-reco {
+        background: #FFE4E1;
+        color: #DC143C;
+      }
+      
+      .btn-reset {
+        background: #F0E6FF;
+        color: #6A0DAD;
+      }
+      
+      .menu-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+      }
+      
+      /* Streamlit 기본 버튼 스타일 오버라이드 */
+      .stButton > button {
+        width: 100% !important;
+        padding: 16px 20px !important;
+        margin: 8px 0 !important;
+        border: none !important;
+        border-radius: 16px !important;
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+      }
+      
+      /* 각 버튼의 색상 적용 */
+      .stButton:nth-child(1) > button {
+        background: #FFE4B5 !important;
+        color: #8B4513 !important;
+      }
+      
+      .stButton:nth-child(2) > button {
+        background: #E6F3FF !important;
+        color: #0066CC !important;
+      }
+      
+      .stButton:nth-child(3) > button {
+        background: #E8F5E8 !important;
+        color: #2E8B57 !important;
+      }
+      
+      .stButton:nth-child(4) > button {
+        background: #FFE4E1 !important;
+        color: #DC143C !important;
+      }
+      
+      .stButton:nth-child(5) > button {
+        background: #F0E6FF !important;
+        color: #6A0DAD !important;
+      }
+      
+      .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
+      }
+      
+      /* 하단 설명 텍스트 */
+      .footer-text {
+        margin-top: 1.5rem;
+        font-size: 14px;
+        color: #7f8c8d;
+        font-style: italic;
+      }
+      
+      /* 반응형 디자인 */
+      @media (max-width: 480px) {
+        .main-container {
+          margin: 1rem;
+          padding: 1.5rem;
+        }
+        
+        .app-title {
+          font-size: 24px;
+        }
+        
+        .menu-button, .stButton > button {
+          font-size: 16px !important;
+          padding: 14px 18px !important;
+        }
+      }
     </style>
     """, unsafe_allow_html=True)
 
-    # 카드
-    with st.container():
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
-
-        # 브랜드/타이틀(간단 버전)
-        col1, col2 = st.columns([1,4])
-        with col1:
-            st.markdown("### ✳️")
-            st.markdown("👵👴")
-        with col2:
-            st.markdown('<div class="brand"><div class="kb">KB</div></div>', unsafe_allow_html=True)
-            st.markdown('<div class="title">시니어 연금 계산기</div>', unsafe_allow_html=True)
-
-        # 메뉴 (순서: 유형보기 → 맞춤추천 → 시뮬레이션 → 연금계산 → 설문다시하기)
-        st.markdown('<div class="menu">', unsafe_allow_html=True)
-
-        # 1) 내 금융 유형 보기 → 설문(미수령 플로우) 시작
-        if st.button("내 금융 유형 보기", key="home_btn_type"):
-            st.session_state.page = 'not_receiving'
-            st.session_state.question_step = 1
-            st.rerun()
-
-        # 2) 맞춤 상품 추천 → 상품 정보(또는 추천 페이지가 있으면 그걸로)
-        if st.button("맞춤 상품 추천", key="home_btn_reco"):
-            st.session_state.page = 'product_info'   # 추천 전용 페이지가 있으면 그 키로 바꿔도 됨
-            st.rerun()
-
-        # 3) 노후 시뮬레이션 → 현재 결과/시뮬레이션 페이지로 연결
-        if st.button("노후 시뮬레이션", key="home_btn_sim"):
-            st.session_state.page = 'receiving_result'  # 별도 'simulation' 페이지가 있으면 그걸로
-            st.rerun()
-
-        # 4) 연금 계산하기 → 미수령 계산 플로우 시작
-        if st.button("연금 계산하기", key="home_btn_predict"):
-            st.session_state.page = 'not_receiving'
-            st.session_state.question_step = 1
-            st.rerun()
-
-        # 5) 설문 다시하기 → 전체 초기화 후 설문 시작
-        if st.button("설문 다시하기", key="home_btn_reset"):
-            st.session_state.page = 'not_receiving'
-            st.session_state.question_step = 1
-            st.session_state.answers = {}
-            st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)  # /.menu
-        st.markdown('<div class="caption">버튼을 눌러 다음 단계로 이동하세요</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)  # /.home-card
-
+    # 메인 컨테이너
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+    
+    # 브랜드 섹션
+    st.markdown("""
+    <div class="brand-section">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+            <div class="kb-logo">KB</div>
+            <div class="elderly-icons">👵👴</div>
+        </div>
+        <div class="app-title">시니어 연금 계산기</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 메뉴 버튼들
+    st.markdown('<div class="menu-section">', unsafe_allow_html=True)
+    
+    # 1) 내 금융 유형 보기
+    if st.button("내 금융 유형 보기", key="home_btn_type"):
+        st.session_state.flow = "survey"
+        st.rerun()
+    
+    # 2) 연금 계산하기
+    if st.button("연금 계산하기", key="home_btn_predict"):
+        st.session_state.flow = "predict"
+        st.rerun()
+    
+    # 3) 노후 시뮬레이션
+    if st.button("노후 시뮬레이션", key="home_btn_sim"):
+        st.session_state.flow = "sim"
+        st.rerun()
+    
+    # 4) 맞춤 상품 추천
+    if st.button("맞춤 상품 추천", key="home_btn_reco"):
+        st.session_state.flow = "recommend"
+        st.rerun()
+    
+    # 5) 설문 다시하기
+    if st.button("설문 다시하기", key="home_btn_reset"):
+        st.session_state.flow = "survey"
+        st.session_state.question_step = 1
+        st.session_state.answers = {}
+        st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # menu-section 닫기
+    
+    # 하단 설명
+    st.markdown(
+        '<div class="footer-text">버튼을 눌러 다음 단계로 이동하세요</div>',
+        unsafe_allow_html=True
+    )
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # main-container 닫기
 
 
 # 공통 설문 문항
