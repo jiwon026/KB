@@ -285,66 +285,142 @@ def load_fund_csv():
 # 모델 로딩
 survey_model, survey_encoder, reg_model, type_model = load_models()
 
+def preprocess_products(df: pd.DataFrame, kind: str) -> pd.DataFrame:
+    """
+    필요한 컬럼 표준화. 없으면 기본값 채우기.
+    기대 컬럼:
+      - 상품명, 구분, 예상수익률(연), 리스크, 최소투자금액, 투자기간(개월)
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[
+            "상품명","구분","예상수익률(연)","리스크","최소투자금액","투자기간(개월)"
+        ])
+
+    out = df.copy()
+    out["구분"] = kind
+
+    # 컬럼 없으면 기본값 생성
+    if "상품명" not in out.columns:
+        out["상품명"] = out.get("펀드명", out.index.astype(str)).astype(str)
+
+    # 예상수익률(연) → 숫자(%기호 제거)
+    if "예상수익률(연)" not in out.columns:
+        out["예상수익률(연)"] = 3.0
+    out["예상수익률(연)"] = (
+        out["예상수익률(연)"]
+        .astype(str).str.replace("%","", regex=False)
+        .astype(float)
+        .fillna(0.0)
+    )
+
+    if "리스크" not in out.columns:
+        out["리스크"] = "중간"
+
+    if "최소투자금액" not in out.columns:
+        out["최소투자금액"] = 0
+    out["최소투자금액"] = pd.to_numeric(out["최소투자금액"], errors="coerce").fillna(0).astype(float)
+
+    if "투자기간(개월)" not in out.columns:
+        out["투자기간(개월)"] = 12
+    out["투자기간(개월)"] = pd.to_numeric(out["투자기간(개월)"], errors="coerce").fillna(12).astype(int)
+
+    return out[["상품명","구분","예상수익률(연)","리스크","최소투자금액","투자기간(개월)"]]
+
+def rule_based_filter(df: pd.DataFrame, cond: dict) -> pd.DataFrame:
+    """
+    - 최소투자금액 <= 투자금액
+    - 투자기간(개월)이 사용자가 선택한 기간과 크게 어긋나지 않는 상품 우선(±12개월)
+    - 리스크 매칭(대략적)
+    """
+    if df.empty:
+        return df
+
+    invest = float(cond.get("투자금액", 0) or 0)
+    period = int(cond.get("투자기간", 12) or 12)
+    risk  = cond.get("투자성향", "위험중립형")
+
+    # 리스크 레벨 매칭
+    def risk_ok(x):
+        x = str(x)
+        if risk == "안정형":
+            return ("낮" in x) or ("보수" in x) or (x in ["낮음","안정형"])
+        if risk == "공격형":
+            return ("높" in x) or ("공격" in x) or (x in ["높음","공격형"])
+        return True  # 위험중립형은 모두 허용
+
+    df2 = df.copy()
+    df2 = df2[df2["최소투자금액"] <= invest]
+
+    # 기간 차이 계산 후 가중치 컬럼
+    df2["기간차"] = (df2["투자기간(개월)"] - period).abs()
+    df2 = df2[df2["기간차"] <= 12] if not df2.empty else df2
+
+    if not df2.empty:
+        df2 = df2[df2["리스크"].apply(risk_ok)]
+
+    return df2.drop(columns=["기간차"], errors="ignore") if not df2.empty else df2
+
+
+
 def get_custom_recommendations_from_csv(investment_amount, period, risk_level, target_monthly):
     """실제 CSV 데이터에서 조건에 맞는 상품 추천"""
-    
     try:
-        # CSV 데이터 로딩 및 전처리
         dep_raw = load_deposit_csv()
         fun_raw = load_fund_csv()
-        
+
         dep = preprocess_products(dep_raw, "예·적금")
         fun = preprocess_products(fun_raw, "펀드")
-        
-        # 전체 상품 통합
+
         all_products = pd.concat([dep, fun], ignore_index=True)
-        
         if all_products.empty:
             return []
-        
-        # 사용자 조건 딕셔너리
+
         user_conditions = {
-            '투자금액': investment_amount,
-            '투자기간': period, 
+            '투자금액': float(investment_amount),
+            '투자기간': int(period),
             '투자성향': risk_level,
-            '목표월이자': target_monthly
+            '목표월이자': float(target_monthly)
         }
-        
-        # 규칙 기반 필터링
-        filtered_products = rule_based_filter(all_products, user_conditions)
-        
-        if filtered_products.empty:
+
+        filtered = rule_based_filter(all_products, user_conditions)
+        if filtered.empty:
             return []
-        
-        # 추천 결과 생성
-        recommendations = recommend_fallback_split(user_conditions)
-        
-        if recommendations.empty or '메시지' in recommendations.columns:
-            return []
-        
-        # 결과 포맷 변환
+
+        # 월 예상수익 계산(투자금액 × 연수익률 / 12)
+        filtered = filtered.copy()
+        filtered["월예상수익금(만원)"] = (
+            user_conditions["투자금액"] * (filtered["예상수익률(연)"] / 100.0) / 12.0
+        )
+
+        # 점수: 목표월이자에 얼마나 근접한가
+        filtered["추천점수"] = (100 - (filtered["월예상수익금(만원)"] - user_conditions["목표월이자"]).abs() * 2).clip(lower=0)
+
+        # 정렬: 점수↓, 연수익률↓
+        filtered = filtered.sort_values(["추천점수","예상수익률(연)"], ascending=False)
+
         result = []
-        for _, row in recommendations.head(5).iterrows():
-            monthly_return = row.get('월예상수익금(만원)', 0)
-            annual_rate = row.get('예상수익률(연)', '0%')
-            
+        for _, row in filtered.head(5).iterrows():
             result.append({
                 '상품명': row.get('상품명', '상품명 없음'),
                 '구분': row.get('구분', '기타'),
-                '월수령액': f"{monthly_return:.1f}만원",
-                '연수익률': annual_rate,
+                '월수령액': f"{row.get('월예상수익금(만원)', 0):.1f}만원",
+                '연수익률': f"{row.get('예상수익률(연)', 0):.1f}%",
                 '리스크': row.get('리스크', '중간'),
-                '최소투자금액': f"{row.get('최소투자금액', 0)}만원",
-                '투자기간': f"{row.get('투자기간(개월)', period)}개월",
-                '추천점수': max(0, 100 - abs(monthly_return - target_monthly) * 2)  # 목표 월이자 대비 점수
+                '최소투자금액': f"{int(row.get('최소투자금액', 0))}만원",
+                '투자기간': f"{int(row.get('투자기간(개월)', period))}개월",
+                '추천점수': float(row.get('추천점수', 0))
             })
-        
         return result
-        
+
     except Exception as e:
         st.error(f"추천 시스템 오류: {e}")
-        # 폴백: 기본 추천
-        return get_fallback_recommendations(investment_amount, period, risk_level, target_monthly)
+        return get_fallback_recommendations(
+            investment_amount=int(investment_amount),
+            period=int(period),
+            risk_level=risk_level,
+            target_monthly=float(target_monthly)
+        )
+        
 def get_fallback_recommendations(investment_amount, period, risk_level, target_monthly):
     """CSV 로딩 실패시 폴백 추천"""
     base_products = {
@@ -1057,6 +1133,16 @@ def render_survey_result_page():
 # =================================
 # 연금 계산 페이지
 # =================================
+def calculate_pension_estimate(monthly_income: float, pension_years: int) -> float:
+    """
+    매우 단순한 추정식: 과거 평균소득의 일부 × 가입연수 보정
+    """
+    accrual = min(max(pension_years, 0), 40) / 40.0   # 0~1
+    base_ratio = 0.45                                  # 임의 계수(조정 가능)
+    est = monthly_income * base_ratio * accrual
+    return round(est, 1)
+
+
 def render_pension_input_page():
     render_header("연금 계산기")
     
@@ -1132,6 +1218,50 @@ def render_pension_result_page():
 # =================================
 # 상품 추천 페이지
 # =================================
+def simple_recommend(answers: dict):
+    """
+    설문 답변을 이용해 CSV 기반 추천을 호출하고,
+    비어있으면 폴백 추천을 돌려주는 래퍼.
+    """
+    # 기본값/파싱
+    age = int(answers.get('age', 65) or 65)
+    assets = float(answers.get('assets', 5000) or 5000)
+    risk = answers.get('risk', '위험중립형') or '위험중립형'
+    income = float(answers.get('income', 200) or 200)
+
+    # 추천 입력값 추정(설문 기반 함수 로직과 일치)
+    if age >= 70:
+        invest_amount = min(assets * 0.3, 3000)
+        period = 12
+    elif age >= 60:
+        invest_amount = min(assets * 0.4, 5000)
+        period = 24
+    else:
+        invest_amount = min(assets * 0.5, 8000)
+        period = 36
+    target_monthly = income * 0.1
+
+    # CSV 기반 추천 시도
+    recs = get_custom_recommendations_from_csv(
+        investment_amount=invest_amount,
+        period=period,
+        risk_level=risk if risk in ["안정형","위험중립형","공격형"] else (
+            "안정형" if "안정" in risk else "공격형" if "공격" in risk or "적극" in risk else "위험중립형"
+        ),
+        target_monthly=target_monthly
+    )
+    if recs:
+        return recs
+
+    # 폴백
+    return get_fallback_recommendations(
+        investment_amount=int(invest_amount),
+        period=int(period),
+        risk_level=risk if risk in ["안정형","위험중립형","공격형"] else "위험중립형",
+        target_monthly=float(target_monthly)
+    )
+
+
 def render_recommendation_page():
     render_header("맞춤 상품 추천")
     
