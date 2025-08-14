@@ -664,6 +664,15 @@ elif ss.flow == "recommend":
         # 다운로드
         csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+        col_go1, col_go2 = st.columns(2)
+        with col_go1:
+            if st.button("📈 노후 시뮬레이션으로", key="go_to_sim"):
+                ss.flow = "sim"          # 상태(rec_df 등) 그대로 유지한 채 이동
+                st.rerun()
+        with col_go2:
+            if st.button("🏠 메인으로", key="go_to_main_from_reco"):
+                ss.flow = "main"         # 상태는 유지(원하면 유지), '처음으로'와 역할 분리
+                st.rerun()
 
     # 네비게이션
     if st.button("처음으로 돌아가기"):
@@ -752,18 +761,15 @@ elif ss.flow == "predict":
 elif ss.flow == "sim":
     st.subheader("📈 노후 시뮬레이션")
 
-    # 추천 결과가 있어야 상품별 탭을 만들 수 있음
-    if "rec_df" not in st.session_state:
-        st.warning("먼저 ‘맞춤 상품 추천’에서 추천을 실행해 주세요.")
-        if st.button("맞춤 상품 추천으로 이동"):
-            ss.flow = "recommend"
-            st.rerun()
-        st.stop()
+    has_reco = "rec_df" in st.session_state and not st.session_state["rec_df"].empty
+    rec_df = st.session_state["rec_df"] if has_reco else pd.DataFrame()
+    risk_choice = st.session_state.get("risk_choice", "위험중립형")
 
-    rec_df       = st.session_state["rec_df"]
-    risk_choice  = st.session_state.get("risk_choice", "위험중립형")
+    if not has_reco:
+        st.info("추천 결과 없이도 기본 시뮬레이션을 먼저 볼 수 있어요. "
+                "‘맞춤 상품 추천’에서 추천을 실행하면 상품별 탭이 추가됩니다.")
 
-    # 설문값에서 현재 나이/자산/소득/지출 가져오기(없으면 합리적 기본값)
+    # 설문값(없으면 기본값)
     ans = st.session_state.get("answers", {})
     current_age     = int(ans.get("age", 67))
     end_age         = 100
@@ -773,7 +779,6 @@ elif ss.flow == "sim":
     monthly_income  = pension_month + income_month
     monthly_expense = float(ans.get("living_cost", 130))
 
-    # 상단 지표: 기본 vs 투자
     base_return   = 0.02
     invest_return = get_invest_return_from_risk(risk_choice)
 
@@ -798,18 +803,15 @@ elif ss.flow == "sim":
     with st.form("sim_form_only"):
         colA, colB = st.columns(2)
         with colA:
-            inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0,
-                                      3.0, 0.1, key="sim_inflation_only")
+            inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1, key="sim_inflation_only")
         with colB:
-            base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0,
-                                        2.0, 0.1, key="sim_base_return_only")
+            base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1, key="sim_base_return_only")
         submitted = st.form_submit_button("시뮬레이션 실행")
 
     if submitted:
         inflation = inflation_pct / 100.0
         base_r    = base_return_pct / 100.0
 
-        # 기본 시나리오
         log_base2, _ = retirement_simulation(
             current_age, end_age, current_assets, monthly_income, monthly_expense,
             inflation_rate=inflation, investment_return=base_r
@@ -817,35 +819,38 @@ elif ss.flow == "sim":
         df_b = (pd.DataFrame(log_base2)[['나이','잔액']]
                 .rename(columns={'잔액':'기본 시나리오'}) if log_base2 else pd.DataFrame())
 
-        # 추천 상품별 탭 + 라인차트
-        st.markdown("### 📈 추천 상품별 적용 시나리오")
-        rec_records = rec_df.to_dict(orient="records")
-        tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+        # 추천 결과가 있을 때만 상품 탭 렌더
+        if has_reco:
+            st.markdown("### 📈 추천 상품별 적용 시나리오")
+            rec_records = rec_df.to_dict(orient="records")
+            tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
 
-        for tab, r in zip(tabs, rec_records):
-            with tab:
-                if '예상수익률' in r and pd.notnull(r['예상수익률']):
-                    prod_return_pct = float(r['예상수익률']) * 100.0
-                else:
-                    txt = str(r.get('예상수익률(연)','0')).replace('%','')
-                    try: prod_return_pct = float(txt)
-                    except: prod_return_pct = 5.0
-                prod_r = prod_return_pct / 100.0
+            for tab, r in zip(tabs, rec_records):
+                with tab:
+                    if '예상수익률' in r and pd.notnull(r['예상수익률']):
+                        prod_return_pct = float(r['예상수익률']) * 100.0
+                    else:
+                        txt = str(r.get('예상수익률(연)','0')).replace('%','')
+                        try: prod_return_pct = float(txt)
+                        except: prod_return_pct = 5.0
+                    prod_r = prod_return_pct / 100.0
 
-                log_prod2, _ = retirement_simulation(
-                    current_age, end_age, current_assets, monthly_income, monthly_expense,
-                    inflation_rate=inflation, investment_return=prod_r
-                )
-                df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(
-                    columns={'잔액': f"{r.get('상품명','-')} 적용"}
-                )
-                st.caption(
-                    f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
-                    f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
-                )
-                chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
-                            if not df_b.empty else df_p.set_index('나이'))
-                st.line_chart(chart_df)
+                    log_prod2, _ = retirement_simulation(
+                        current_age, end_age, current_assets, monthly_income, monthly_expense,
+                        inflation_rate=inflation, investment_return=prod_r
+                    )
+                    df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(
+                        columns={'잔액': f"{r.get('상품명','-')} 적용"}
+                    )
+                    st.caption(
+                        f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
+                        f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
+                    )
+                    chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                                if not df_b.empty else df_p.set_index('나이'))
+                    st.line_chart(chart_df)
+        else:
+            st.info("상품별 그래프는 추천 실행 후 표시됩니다. ‘맞춤 상품 추천’에서 추천을 실행해 주세요.")
 
     st.markdown("---")
     colX, colY = st.columns(2)
@@ -857,3 +862,4 @@ elif ss.flow == "sim":
         if st.button("메인으로"):
             ss.flow = "main"
             st.rerun()
+
