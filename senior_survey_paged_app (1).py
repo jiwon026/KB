@@ -15,7 +15,7 @@ except Exception as e:
 
 # 페이지 설정
 st.set_page_config(
-    page_title="KB 시니어 연금 계산기",
+    page_title="노후愛",
     page_icon="🏦",
     layout="centered",
     initial_sidebar_state="collapsed"
