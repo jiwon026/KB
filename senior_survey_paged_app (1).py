@@ -519,6 +519,7 @@ def render_custom_recommendation_page():
 
 
 # render_recommendation_page도 업데이트 (설문 기반 추천 개선)
+# render_recommendation_page 함수 수정 (1100라인 근처)
 def render_recommendation_page():
     render_header("맞춤 상품 추천")
     
@@ -562,7 +563,7 @@ def render_recommendation_page():
         """, unsafe_allow_html=True)
         
         with st.spinner('실제 상품 데이터에서 최적 상품을 분석 중...'):
-            # CSV 기반 설문 추천
+            # CSV 기반 설문 추천 - simple_recommend 대신 get_survey_based_recommendations 사용
             recommendations = get_survey_based_recommendations(st.session_state.answers)
         
         if not recommendations:
