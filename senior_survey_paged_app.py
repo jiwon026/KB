@@ -377,18 +377,12 @@ def render_final_screen_clickable(display_type: str, rec_df: pd.DataFrame):
     # 카드형 Expander 스타일
     st.markdown("""
     <style>
-      .ex-card [data-testid="stExpander"] { border:0 !important; }
-      .ex-card details {
-        border: 2px solid #eaeaea !important; border-radius: 18px !important;
-        background: #fff !important; box-shadow: 0 4px 14px rgba(0,0,0,0.06) !important;
-        margin-bottom: 12px !important;
-      }
-      .ex-card summary {
-        list-style: none; cursor: pointer; padding: 14px 16px !important;
-      }
-      .ex-title { font-size:17px; font-weight:800; margin-right:8px; }
-      .ex-line  { font-size:14px; color:#222; }
-      .ex-k { font-weight:700; }
+    .card-wrap{ position:relative; }
+    .card-wrap .overlay-btn > div > button{
+      position:absolute; inset:0;  /* 카드를 전부 덮도록 */
+      opacity:0;                    /* 보이지 않게 */
+      cursor:pointer;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -396,38 +390,43 @@ def render_final_screen_clickable(display_type: str, rec_df: pd.DataFrame):
     st.caption(desc)
 
     items = rec_df.head(3).to_dict(orient="records")
-    for i, r in enumerate(items, start=1):
-        name = str(r.get("상품명", "-"))
-        mret = r.get("월예상수익금(만원)", "-")
-        risk = r.get("리스크", "-")
-        period = r.get("투자기간(개월)", r.get("권장투자기간", "-"))
-        min_amt = r.get("최소투자금액", "-")
-        # '예상수익률'이 소수(0.05)면 % 텍스트로 보이게 처리
-        if "예상수익률(연)" in r and pd.notnull(r["예상수익률(연)"]):
-            rate_txt = str(r["예상수익률(연)"])
-        else:
-            try:
-                rate_txt = f"{float(r.get('예상수익률', 0.0)) * 100:.2f}%"
-            except:
-                rate_txt = "-"
-
-        # ▽ 카드 헤더 (클릭 가능한 summary)
-        with st.container():
-            st.markdown('<div class="ex-card">', unsafe_allow_html=True)
-            with st.expander(
-                label=f"{i}. {name}  ·  월 예상수익 {mret}만원  ·  리스크 {risk}",
-                expanded=False
-            ):
-                # ▽ 펼쳐졌을 때 상세
-                rows = [
-                    ("상품명", name),
-                    ("월예상수익금(만원)", mret),
-                    ("예상수익률", rate_txt),
-                    ("투자기간", f"{period}개월"),
-                    ("최소투자금액", min_amt),
-                ]
-                st.table(pd.DataFrame(rows, columns=["항목", "값"]))
+    cols = st.columns(3)
+    for i, (col, r) in enumerate(zip(cols, items), start=1):
+        with col:
+            # ① 카드 HTML (그대로)
+            st.markdown('<div class="card-wrap">', unsafe_allow_html=True)
+            st.markdown(
+                f'''
+                <div class="card">
+                  <div><span class="badge b{i}">{i}</span><span class="pname">{r.get("상품명","-")}</span></div>
+                  <div class="meta"><span class="k">월 예상수익</span> {r.get("월예상수익금(만원)","-")}만원</div>
+                  <div class="meta"><span class="k">리스크</span> {r.get("리스크","-")}</div>
+                </div>
+                ''', unsafe_allow_html=True
+            )
+            # ② 카드 전체를 덮는 투명 버튼
+            with st.container():
+                st.markdown('<div class="overlay-btn">', unsafe_allow_html=True)
+                if st.button(" ", key=f"card_click_{i}"):  # 라벨은 공백
+                    st.session_state["selected_product"] = r
+                st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 상세
+    sel = st.session_state.get("selected_product")
+    if sel:
+        st.markdown("---")
+        st.subheader("📋 상품 상세")
+        rows = [
+            ("상품명", sel.get("상품명", "-")),
+            ("월예상수익금(만원)", sel.get("월예상수익금(만원)", "-")),
+            ("예상수익률", (sel.get("예상수익률(연)") 
+                         or f"{float(sel.get('예상수익률', 0.0))*100:.2f}%")),
+            ("투자기간", f"{sel.get('투자기간(개월)', sel.get('권장투자기간','-'))}개월"),
+            ("최소투자금액", sel.get("최소투자금액", "-")),
+        ]
+        st.table(pd.DataFrame(rows, columns=["항목","값"]))
+
 
 
 # =================================
