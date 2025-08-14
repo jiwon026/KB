@@ -451,7 +451,7 @@ def reset_app_state(go: str | None = None):
 
 # ===== 메인 화면 (이미지처럼) =====
 def render_main_home():
-    # 페이지용 스타일 (버튼 색/모양, 카드 레이아웃)
+    # 스타일
     st.markdown("""
     <style>
       .home-card{
@@ -466,78 +466,62 @@ def render_main_home():
         width:100%; height:56px; border-radius:18px; font-size:18px; font-weight:800;
         border:0;
       }
-      /* 파스텔 톤 5색 */
       .menu .stButton:nth-child(1)>button{ background:#FFE4B5; color:#533c00; } /* 베이지 */
-      .menu .stButton:nth-child(2)>button{ background:#D7E3FF; color:#0f2b7e; } /* 하늘 */
+      .menu .stButton:nth-child(2)>button{ background:#FFD6D1; color:#7a1b13; } /* 코랄 */
       .menu .stButton:nth-child(3)>button{ background:#D9F7E7; color:#0f5132; } /* 민트 */
-      .menu .stButton:nth-child(4)>button{ background:#FFD6D1; color:#7a1b13; } /* 코랄 */
+      .menu .stButton:nth-child(4)>button{ background:#D7E3FF; color:#0f2b7e; } /* 하늘 */
       .menu .stButton:nth-child(5)>button{ background:#E9D8FD; color:#3b0764; } /* 라일락 */
       .menu .stButton{ margin-bottom:12px; }
       .caption{ font-size:12px; color:#666; text-align:center; margin-top:6px; }
     </style>
     """, unsafe_allow_html=True)
 
-    # 메인 카드
+    # 카드
     with st.container():
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
 
-        # 브랜드/타이틀
+        # 브랜드/타이틀(간단 버전)
         col1, col2 = st.columns([1,4])
         with col1:
-            # 로고 이미지가 있으면 사용, 없으면 이모지
-            logo_path = os.path.join(BASE_DIR, "kb_logo.png")
-            if os.path.exists(logo_path):
-                st.image(logo_path, use_column_width=True)
-            else:
-                st.markdown("### ✳️")
-                st.markdown("👵👴")
+            st.markdown("### ✳️")
+            st.markdown("👵👴")
         with col2:
             st.markdown('<div class="brand"><div class="kb">KB</div></div>', unsafe_allow_html=True)
             st.markdown('<div class="title">시니어 연금 계산기</div>', unsafe_allow_html=True)
 
-        # 메뉴 버튼
-        # 메뉴 버튼 (순서: 유형보기 → 맞춤추천 → 시뮬레이션 → 연금계산 → 설문다시하기)
+        # 메뉴 (순서: 유형보기 → 맞춤추천 → 시뮬레이션 → 연금계산 → 설문다시하기)
         st.markdown('<div class="menu">', unsafe_allow_html=True)
-        
-        # 1) 내 금융 유형 보기
+
+        # 1) 내 금융 유형 보기 → 설문(미수령 플로우) 시작
         if st.button("내 금융 유형 보기", key="home_btn_type"):
-            if st.session_state.get("tabnet_label"):
-                st.session_state["flow"] = "result"
-            else:
-                st.session_state["flow"] = "survey"
+            st.session_state.page = 'not_receiving'
+            st.session_state.question_step = 1
             st.rerun()
-        
-        # 2) 맞춤 상품 추천
+
+        # 2) 맞춤 상품 추천 → 상품 정보(또는 추천 페이지가 있으면 그걸로)
         if st.button("맞춤 상품 추천", key="home_btn_reco"):
-            st.session_state["flow"] = "recommend"
+            st.session_state.page = 'product_info'   # 추천 전용 페이지가 있으면 그 키로 바꿔도 됨
             st.rerun()
-        
-        # 3) 노후 시뮬레이션
+
+        # 3) 노후 시뮬레이션 → 현재 결과/시뮬레이션 페이지로 연결
         if st.button("노후 시뮬레이션", key="home_btn_sim"):
-            st.session_state["flow"] = "sim"
+            st.session_state.page = 'receiving_result'  # 별도 'simulation' 페이지가 있으면 그걸로
             st.rerun()
-        
-        # 4) 연금 계산하기
+
+        # 4) 연금 계산하기 → 미수령 계산 플로우 시작
         if st.button("연금 계산하기", key="home_btn_predict"):
-            st.session_state["flow"] = "predict"
+            st.session_state.page = 'not_receiving'
+            st.session_state.question_step = 1
             st.rerun()
-        
-        # 5) 설문 다시하기  → 초기화 후 설문으로
+
+        # 5) 설문 다시하기 → 전체 초기화 후 설문 시작
         if st.button("설문 다시하기", key="home_btn_reset"):
-            if "reset_app_state" in globals():
-                reset_app_state(go="survey")
-            else:
-                # 예비 초기화(이미 reset_app_state 있다면 불필요)
-                for k in [
-                    "flow","pred_amount","answers","prefill_survey","pred_label",
-                    "tabnet_label","rec_df","display_type","risk_choice",
-                    "show_reco","show_sim","sim_ready","sim_inputs",
-                    *[kk for kk in st.session_state.keys() if str(kk).startswith("survey_")],
-                ]: st.session_state.pop(k, None)
-                st.session_state["flow"] = "survey"
-                st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.session_state.page = 'not_receiving'
+            st.session_state.question_step = 1
+            st.session_state.answers = {}
+            st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)  # /.menu
         st.markdown('<div class="caption">버튼을 눌러 다음 단계로 이동하세요</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)  # /.home-card
 
