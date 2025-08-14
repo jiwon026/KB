@@ -81,6 +81,48 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+<style>
+/* 공통 버튼 스타일 유지 */
+.stButton > button {
+    width:100% !important; height:72px !important; border-radius:20px !important;
+    font-size:18px !important; font-weight:bold !important; border:none !important;
+    box-shadow:0 2px 8px rgba(0,0,0,0.1) !important; transition:all .2s ease !important; white-space:pre-line !important;
+}
+
+/* ====== 메인 버튼별 색상 (help 속성으로 타겟팅) ====== */
+/* 내 금융유형 보기: 노란색 */
+button[title="btn-fin-type"]{
+  background:#FFD700 !important; color:#1f2937 !important;
+}
+button[title="btn-fin-type"]:hover{ filter:brightness(0.98); }
+
+/* 연금 계산하기: 하늘색 */
+button[title="btn-pension-calc"]{
+  background:#87CEFA !important; color:#1f2937 !important;
+}
+button[title="btn-pension-calc"]:hover{ filter:brightness(0.98); }
+
+/* 노후시뮬레이션: 핑크 */
+button[title="btn-simulation"]{
+  background:#FFB6C1 !important; color:#1f2937 !important;
+}
+button[title="btn-simulation"]:hover{ filter:brightness(0.98); }
+
+/* 맞춤 상품 추천: 연두색 */
+button[title="btn-recommend"]{
+  background:#90EE90 !important; color:#1f2937 !important;
+}
+button[title="btn-recommend"]:hover{ filter:brightness(0.98); }
+
+/* 다시 설문하기 & 전화상담: 연주황 */
+button[title="btn-survey-reset"],
+button[title="btn-phone"]{
+  background:#FFA07A !important; color:#1f2937 !important;
+}
+button[title="btn-survey-reset"]:hover,
+button[title="btn-phone"]:hover{ filter:brightness(0.98); }
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # 경로/파일
@@ -416,7 +458,8 @@ def render_header(title="노후愛"):
 def render_main_page():
     render_header()
 
-    if st.button("내 금융유형\n보기", key="financial_type", use_container_width=True):
+    # 내 금융유형 보기 (노란색)
+    if st.button("내 금융유형\n보기", key="financial_type", help="btn-fin-type", use_container_width=True):
         if ss.get('user_type'):
             ss.page = 'survey_result'
         else:
@@ -425,17 +468,20 @@ def render_main_page():
 
     st.markdown('<div style="margin: 15px 0;"></div>', unsafe_allow_html=True)
 
-    if st.button("연금\n계산하기", key="pension_calc", use_container_width=True):
+    # 연금 계산하기 (하늘색)
+    if st.button("연금\n계산하기", key="pension_calc", help="btn-pension-calc", use_container_width=True):
         ss.page = 'pension_input'; st.rerun()
 
     st.markdown('<div style="margin: 20px 0;"></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("노후\n시뮬레이션", key="simulation", use_container_width=True):
+        # 노후시뮬레이션 (핑크)
+        if st.button("노후\n시뮬레이션", key="simulation", help="btn-simulation", use_container_width=True):
             ss.page = 'simulation'; st.rerun()
     with col2:
-        if st.button("맞춤 상품\n추천", key="recommendation", use_container_width=True):
+        # 맞춤 상품 추천 (연두색)
+        if st.button("맞춤 상품\n추천", key="recommendation", help="btn-recommend", use_container_width=True):
             if ss.get('answers'):
                 ss.page = 'survey_plus_custom'
             else:
@@ -446,11 +492,14 @@ def render_main_page():
 
     col3, col4 = st.columns(2)
     with col3:
-        if st.button("설문\n다시하기", key="survey_reset", use_container_width=True):
+        # 다시 설문하기 (연주황)
+        if st.button("설문\n다시하기", key="survey_reset", help="btn-survey-reset", use_container_width=True):
             ss.page = 'survey'; ss.question_step = 1; ss.answers = {}; ss.user_type = None; st.rerun()
     with col4:
-        if st.button("📞 전화\n상담", key="phone_consultation", use_container_width=True):
+        # 전화상담 (연주황)
+        if st.button("📞 전화\n상담", key="phone_consultation", help="btn-phone", use_container_width=True):
             ss.page = 'phone_consultation'; st.rerun()
+
 
 
 # =========================
