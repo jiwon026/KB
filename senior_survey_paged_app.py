@@ -632,6 +632,25 @@ def render_main_home():
           font-size: 20px !important;
           padding: 20px 22px !important;
           min-height: 65px !important;
+
+        /* 모바일 최적화 */
+        @media (max-width: 400px) {
+            .custom-button {
+                font-size: 18px;
+                padding: 20px 15px;
+            }
+            
+            .green-button, .pink-button {
+                font-size: 14px;
+                padding: 18px 8px;
+            }
+            
+            .kb-logo {
+                font-size: 32px;
+            }
+            
+            .title {
+                font-size: 20px;
         }
       }
     </style>
