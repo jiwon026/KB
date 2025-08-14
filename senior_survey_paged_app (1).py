@@ -729,14 +729,22 @@ def render_survey_plus_custom_page():
             st.markdown("---")
             c1, c2, c3 = st.columns(3)
             with c1:
-                if st.button("조건 바꿔 다시 추천"):
+                if st.button("조건 바꿔 다시 추천", key="spc_reco_reset"):
+                    ss.pop("spc_recs", None)
                     st.rerun()
+                    return  # ← 리턴으로 이후 코드 실행 방지
+            
             with c2:
-                if st.button("노후 시뮬레이션으로"):
-                    ss.page = 'simulation'; st.rerun()
+                if st.button("노후 시뮬레이션으로", key="spc_to_sim"):
+                    ss.page = 'simulation'
+                    st.rerun()
+                    return  # ← 즉시 반환
+            
             with c3:
-                if st.button("메인으로"):
-                    ss.page = 'main'; st.rerun()
+                if st.button("메인으로", key="spc_to_main"):
+                    ss.page = 'main'
+                    st.rerun()
+                    return  # ← 즉시 반환
 
 
 # =========================
