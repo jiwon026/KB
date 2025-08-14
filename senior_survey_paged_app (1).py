@@ -397,7 +397,7 @@ ss.setdefault('risk_choice', '위험중립형')
 # =========================
 # 공통 헤더
 # =========================
-def render_header(title="시니어 연금 계산기"):
+def render_header(title="노후愛"):
     st.markdown(f"""
     <div class="main-header">
         <div class="kb-logo">
