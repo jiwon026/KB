@@ -677,7 +677,7 @@ elif ss.flow == "recommend":
         display_type = st.session_state.get("display_type", DEFAULT_DISPLAY_TYPE)
         risk_choice  = st.session_state.get("risk_choice", "위험중립형")
 
-        render_final_screen_clickable(display_type, rec_df)
+        render_final_screen(display_type, rec_df)
         # === 카드 아래 '자세히 보기' 버튼들 ===
         rec_records = rec_df.head(3).to_dict(orient="records")
         cols = st.columns(len(rec_records) if rec_records else 1)
