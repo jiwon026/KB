@@ -489,8 +489,8 @@ def render_main_home():
       }
       
       .elderly-icons {
-        font-size: 40px;
-        margin-left: 8px;
+        font-size: 48px;
+        margin-left: 10px;
       }
       
       .app-title {
@@ -508,10 +508,11 @@ def render_main_home():
       
       .menu-button {
         width: 100%;
+        height: 80px
         padding: 22px 24px;
         margin: 12px 0;
         border: none;
-        border-radius: 16px;
+        border-radius: 20px;
         font-size: 22px;
         font-weight: 700;
         cursor: pointer;
