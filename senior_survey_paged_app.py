@@ -513,8 +513,8 @@ def render_main_home():
         margin: 12px 0;
         border: none;
         border-radius: 20px;
-        font-size: 22px;
-        font-weight: 700;
+        font-size: 40px;
+        font-weight: 800;
         cursor: pointer;
         transition: all 0.3s ease;
         text-align: center;
