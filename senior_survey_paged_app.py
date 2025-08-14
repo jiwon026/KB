@@ -220,16 +220,15 @@ def _add_explain(df: pd.DataFrame, user: dict) -> pd.DataFrame:
     out = df.copy()
     out['월예상수익금(만원)'] = (out['예상수익률'].astype(float) * user['투자금액'] / 12.0).round(1)
     out['투자기간(개월)'] = out['권장투자기간'].astype(int)
-    out['예상수익률'] = out['예상수익률'].astype(float)  # 숫자 보존 (0.05)
+    out['예상수익률'] = out['예상수익률'].astype(float)  # <- 숫자 보존 (0.05)
     out['예상수익률(연)'] = (out['예상수익률'] * 100).round(2).astype(str) + '%'
 
-    # ▼ 여기 두 컬럼을 함께 돌려보내도록 추가
+    # 상세 보기에 필요한 컬럼들을 반환 목록에 포함
     cols = [
         '구분','상품명','월예상수익금(만원)','예상수익률','예상수익률(연)',
         '리스크','투자기간(개월)','최소투자금액','투자성향'
     ]
-    # 누락에 대비
-    cols = [c for c in cols if c in out.columns]
+    cols = [c for c in cols if c in out.columns]  # 누락 대비
     return out[cols]
 
 
@@ -667,6 +666,8 @@ elif ss.flow == "recommend":
             st.session_state["display_type"]  = st.session_state.get("tabnet_label") or DEFAULT_DISPLAY_TYPE
             st.session_state["risk_choice"]   = risk_choice
             st.session_state["show_reco"]     = True
+            st.session_state.pop("selected_product", None)   # ★ 상세 선택 초기화
+            st.rerun()
 
     # 3) 추천 결과 (카드 + 근거만)
     if st.session_state.get("show_reco") and ("rec_df" in st.session_state):
@@ -675,9 +676,10 @@ elif ss.flow == "recommend":
         risk_choice  = st.session_state.get("risk_choice", "위험중립형")
 
         render_final_screen(display_type, rec_df)
-        # 3-2) 추천 카드 아래 '자세히 보기' 버튼들
+        # === 추천 카드 아래 '자세히 보기' 버튼들 ===
         rec_records = rec_df.head(3).to_dict(orient="records")
         cols = st.columns(len(rec_records) if rec_records else 1)
+        
         for i, (col, r) in enumerate(zip(cols, rec_records)):
             with col:
                 pname = str(r.get("상품명", "-"))
@@ -685,22 +687,21 @@ elif ss.flow == "recommend":
                     st.session_state["selected_product"] = r
                     st.rerun()
         
-        # 3-3) 선택된 상품 상세 영역
+        # === 선택된 상품 상세 영역 ===
         sel = st.session_state.get("selected_product")
         if sel:
             st.markdown("---")
             st.subheader("📋 상품 상세")
-            # 표 형태로 깔끔하게 표시
+        
             rows = [
                 ("상품명", sel.get("상품명", "-")),
                 ("월예상수익금(만원)", sel.get("월예상수익금(만원)", "-")),
-                ("예상수익률(연)", sel.get("예상수익률(연)", "-")),
+                ("예상수익률", sel.get("예상수익률(연)", sel.get("예상수익률", "-"))),
                 ("투자성향", sel.get("투자성향", "-")),
-                ("투자기간(개월)", sel.get("투자기간(개월)", "-")),
+                ("투자기간", f"{sel.get('투자기간(개월)', '-') }개월"),
                 ("최소투자금액", sel.get("최소투자금액", "-")),
             ]
-            df_detail = pd.DataFrame(rows, columns=["항목", "값"])
-            st.table(df_detail)
+            st.table(pd.DataFrame(rows, columns=["항목", "값"]))
         
             c1, c2 = st.columns(2)
             with c1:
@@ -711,6 +712,7 @@ elif ss.flow == "recommend":
                 if st.button("시뮬레이션으로 이동", key="go_sim_from_detail"):
                     ss.flow = "sim"
                     st.rerun()
+
 
 
         # 추천 근거(고갈 여부는 내부 계산해서 문장만)
