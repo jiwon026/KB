@@ -466,14 +466,7 @@ def render_main_screen():
         }
         
         /* 메뉴 버튼 스타일 */
-        .menu-container {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
+       
         .stButton > button {
             width: 100% !important;
             height: 80px !important;
