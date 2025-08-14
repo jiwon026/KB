@@ -503,4 +503,420 @@ def render_survey_page():
         {"title":"설문조사 4","question":"4. 피부양자가\n있나요?","type":"choice","options":["예","아니오"],"key":"dependents"},
         {"title":"설문조사 5","question":"5. 현재 보유한\n금융자산(만원)","type":"input","placeholder":"예: 5,000","key":"assets"},
         {"title":"설문조사 6","question":"6. 월 수령하는\n연금 급여(만원)","type":"input","placeholder":"예: 120","key":"pension"},
-        {"title":"설문조사 7","question
+        {"title":"설문조사 7","question":"7. 월 평균\n지출비(만원)","type":"input","placeholder":"예: 180","key":"living_cost"},
+        {"title":"설문조사 8","question":"8. 월 평균\n소득(만원)","type":"input","placeholder":"예: 220","key":"income"},
+        {"title":"설문조사 9","question":"9. 투자 성향을\n선택해주세요.","type":"choice","options":["안정형","안정추구형","위험중립형","적극투자형","공격투자형"],"key":"risk"},
+    ]
+
+    if ss.question_step <= len(questions):
+        q = questions[ss.question_step - 1]
+        render_header(q['title'])
+        st.markdown(f"""
+        <div style="text-align:center; font-size:20px; font-weight:bold; margin:50px 0; line-height:1.5; color:#333;">
+            {q['question']}
+        </div>
+        """, unsafe_allow_html=True)
+
+        if q['type'] == 'input':
+            num_keys = {"age","family_size","assets","pension","living_cost","income"}
+            if q['key'] in num_keys:
+                step = 1 if q['key'] in {"age","family_size"} else 1
+                answer = st.number_input("", min_value=0, step=step, key=f"survey_q{ss.question_step}")
+            else:
+                answer = st.text_input("", placeholder=q['placeholder'], key=f"survey_q{ss.question_step}")
+
+            if (answer or (isinstance(answer,(int,float)) and answer==0)):
+                with st.spinner('다음 단계로 이동 중...'): time.sleep(0.3)
+                ss.answers[q['key']] = answer
+                if ss.question_step < len(questions):
+                    ss.question_step += 1; st.rerun()
+                else:
+                    analyze_user_type()
+                    ss.page = 'survey_result'; st.rerun()
+
+        elif q['type'] == 'choice':
+            st.markdown('<div style="margin: 30px 0;"></div>', unsafe_allow_html=True)
+            for opt in q['options']:
+                if st.button(opt, key=f"choice_{opt}_{ss.question_step}", use_container_width=True):
+                    ss.answers[q['key']] = opt
+                    with st.spinner('다음 단계로 이동 중...'): time.sleep(0.2)
+                    if ss.question_step < len(questions):
+                        ss.question_step += 1; st.rerun()
+                    else:
+                        analyze_user_type(); ss.page='survey_result'; st.rerun()
+
+        progress = ss.question_step / len(questions)
+        st.progress(progress)
+        st.markdown(f"<div style='text-align:center; margin-top:15px; color:#666;'>{ss.question_step}/{len(questions)} 단계</div>", unsafe_allow_html=True)
+
+        if st.button("← 메인으로", key="back_to_main_from_survey"):
+            ss.page = 'main'; st.rerun()
+
+def analyze_user_type():
+    a = ss.answers
+    age         = _to_int(a.get('age'), 65)
+    assets      = _to_float(a.get('assets'), 5000)
+    pension     = _to_float(a.get('pension'), 100)
+    income      = _to_float(a.get('income'), 200)
+    living_cost = _to_float(a.get('living_cost'), 150)
+    risk        = (a.get('risk') or '안정형').strip()
+
+    if assets > 10000 and income > 300:
+        user_type = "자산운용형"
+    elif living_cost > income + pension:
+        user_type = "위험취약형"
+    elif risk in ['적극투자형', '공격투자형']:
+        user_type = "적극투자형"
+    elif assets < 3000 and pension < 80:
+        user_type = "위험취약형"
+    else:
+        user_type = "균형형"
+
+    ss.user_type = user_type
+
+
+# =========================
+# 설문 결과
+# =========================
+def render_survey_result_page():
+    render_header("금융 유형 결과")
+    user_type = ss.user_type or "균형형"
+    info = {
+        "자산운용형": {"icon":"💼","desc":"투자 여력이 충분하며 운용 전략 중심 포트폴리오가 적합합니다.","color":"#4F46E5"},
+        "위험취약형": {"icon":"⚠️","desc":"재무 위험이 높아 지출 관리와 복지 연계가 필요합니다.","color":"#EF4444"},
+        "균형형":     {"icon":"⚖️","desc":"자산과 연금이 안정적이며 보수적 전략이 적합합니다.","color":"#10B981"},
+        "적극투자형": {"icon":"🚀","desc":"수익을 위해 변동성을 감내하며 적극적 투자를 선호합니다.","color":"#F59E0B"},
+    }[user_type]
+
+    st.markdown(f"""
+    <div class="result-card" style="text-align:center; border-left:5px solid {info['color']};">
+        <div style="font-size:48px; margin-bottom:20px;">{info['icon']}</div>
+        <h2 style="color:{info['color']}; margin-bottom:15px;">{user_type}</h2>
+        <p style="font-size:18px; line-height:1.6; color:#666;">{info['desc']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("설문 + 맞춤 조건으로 추천 보기", use_container_width=True):
+            ss.page = 'survey_plus_custom'; st.rerun()
+    with c2:
+        if st.button("노후 시뮬레이션 보기", use_container_width=True):
+            ss.page = 'simulation'; st.rerun()
+
+    if st.button("← 메인으로 돌아가기", use_container_width=True):
+        ss.page = 'main'; st.rerun()
+
+
+# =========================
+# 설문 + 맞춤 조건으로 추천 (참고코드 로직 이식)
+# =========================
+def _defaults_from_survey(answers: dict):
+    age    = _to_int(answers.get('age'), 65)
+    assets = _to_float(answers.get('assets'), 5000)
+    income = _to_float(answers.get('income'), 200)
+    risk   = str(answers.get('risk', '위험중립형') or '위험중립형')
+
+    if age >= 70:
+        invest_amount = min(assets * 0.3, 3000); period = 12
+    elif age >= 60:
+        invest_amount = min(assets * 0.4, 5000); period = 24
+    else:
+        invest_amount = min(assets * 0.5, 8000); period = 36
+
+    target_monthly = income * 0.1
+    risk_map = {'안정형':'안정형','안정추구형':'안정형','위험중립형':'위험중립형','적극투자형':'공격형','공격투자형':'공격형'}
+    risk3 = risk_map.get(risk, '위험중립형')
+    return {
+        "investment_amount": int(round(invest_amount)),
+        "period": int(period),
+        "risk_level": risk3,
+        "target_monthly": float(round(target_monthly, 1)),
+    }
+
+def render_survey_plus_custom_page():
+    render_header("설문 + 맞춤 조건으로 추천")
+    if not ss.answers:
+        st.warning("먼저 설문을 완료해주세요.")
+        if st.button("설문 하러 가기"): ss.page='survey'; st.rerun()
+        return
+
+    defaults = _defaults_from_survey(ss.answers)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        investment_amount = st.number_input("투자금액 (만원)", min_value=10, step=10, value=int(defaults["investment_amount"]))
+        risk_level = st.selectbox("리스크 허용도", ["안정형","위험중립형","공격형"],
+                                  index=["안정형","위험중립형","공격형"].index(defaults["risk_level"]))
+    with col2:
+        period = st.selectbox("투자 기간 (개월)", [6,12,24,36], index=[6,12,24,36].index(int(defaults["period"])))
+        target_monthly = st.number_input("목표 월이자 (만원)", min_value=0.0, step=1.0, value=float(defaults["target_monthly"]))
+
+    st.markdown('<div style="margin: 8px 0 16px 0;"></div>', unsafe_allow_html=True)
+
+    # === 추천 실행: 참고코드의 recommend_fallback_split 사용 ===
+    if st.button("🔍 추천 받기", use_container_width=True):
+        user_pref = {
+            '투자금액':   int(investment_amount),
+            '투자기간':   int(period),
+            '투자성향':   str(risk_level),
+            '목표월이자': float(target_monthly),
+        }
+        with st.spinner("CSV에서 조건에 맞는 상품을 찾는 중..."):
+            rec_df = recommend_fallback_split(user_pref)
+
+        if "메시지" in rec_df.columns:
+            st.warning(rec_df.iloc[0, 0])
+            ss.rec_df = pd.DataFrame()
+        else:
+            # 시뮬과 공유
+            ss.rec_df = rec_df.copy()
+            ss.display_type = ss.get('user_type') or DEFAULT_DISPLAY_TYPE
+            ss.risk_choice  = risk_level
+
+        # 카드 렌더
+        if not rec_df.empty and "메시지" not in rec_df.columns:
+            st.caption(
+                f"검색 조건 · 투자금액 **{investment_amount}만원**, "
+                f"기간 **{period}개월**, 리스크 **{risk_level}**, "
+                f"목표 월이자 **{target_monthly}만원** · 소스: **CSV 기반**"
+            )
+            items = rec_df.head(3).to_dict(orient="records")
+            for i, p in enumerate(items, 1):
+                st.markdown(f"""
+                <div class="product-card">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <h4 style="margin:0;color:#1F2937;">🏆 {i}. {p.get('상품명','-')}</h4>
+                    <span style="background:#10B981;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;">
+                      {p.get('월예상수익금(만원)','-')}만원
+                    </span>
+                  </div>
+                  <div style="color:#666;font-size:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div><strong>구분:</strong> {p.get('구분','-')}</div>
+                    <div><strong>연수익률:</strong> {p.get('예상수익률(연)','-')}</div>
+                    <div><strong>리스크:</strong> {p.get('리스크','-')}</div>
+                    <div><strong>최소투자:</strong> {p.get('최소투자금액','-')}</div>
+                    <div><strong>투자기간:</strong> {p.get('투자기간(개월)','-')}개월</div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 추천 근거
+            a = ss.answers
+            current_age     = _to_int(a.get('age'), 65)
+            current_assets  = _to_float(a.get('assets'), 5000)
+            pension         = _to_float(a.get('pension'), 100)
+            income          = _to_float(a.get('income'), 100)
+            monthly_income  = pension + income
+            monthly_expense = _to_float(a.get('living_cost'), 150)
+
+            log_base, depletion_base = retirement_simulation(
+                current_age, 100, current_assets, monthly_income, monthly_expense,
+                inflation_rate=0.03, investment_return=0.02
+            )
+            reason_text = recommend_reason_from_simulation(
+                depletion_base, current_age, current_assets, monthly_income, monthly_expense, risk_level
+            )
+            st.info(f"🔎 추천 근거: {reason_text}")
+
+            # 다운로드
+            csv_bytes = rec_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("추천 결과 CSV 다운로드", csv_bytes, "recommendations.csv", "text/csv")
+
+            st.markdown("---")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if st.button("조건 바꿔 다시 추천"):
+                    st.rerun()
+            with c2:
+                if st.button("노후 시뮬레이션으로"):
+                    ss.page = 'simulation'; st.rerun()
+            with c3:
+                if st.button("메인으로"):
+                    ss.page = 'main'; st.rerun()
+
+
+# =========================
+# 연금 계산기
+# =========================
+def calculate_pension_estimate(monthly_income: float, pension_years: int) -> float:
+    accrual = min(max(pension_years, 0), 40) / 40.0
+    base_ratio = 0.45
+    return round(monthly_income * base_ratio * accrual, 1)
+
+def render_pension_input_page():
+    render_header("연금 계산기")
+    st.markdown('<div style="text-align:center; color:#666;">평균 월소득과 가입기간을 입력하시면 예상 연금액을 계산해드립니다.</div>', unsafe_allow_html=True)
+    monthly_income = st.number_input("평균 월소득 (만원)", min_value=0, value=300, step=10)
+    pension_years = st.number_input("국민연금 가입기간 (년)", min_value=0, value=25, step=1)
+    if st.button("연금 계산하기", use_container_width=True):
+        ss.pension_result = {'monthly_income':monthly_income,'pension_years':pension_years,'estimated_pension':calculate_pension_estimate(monthly_income,pension_years)}
+        ss.page='pension_result'; st.rerun()
+    if st.button("← 메인으로", key="pension_back"):
+        ss.page='main'; st.rerun()
+
+def render_pension_result_page():
+    render_header("연금 계산 결과")
+    result = ss.get('pension_result', {})
+    estimated = result.get('estimated_pension', 0)
+    income    = result.get('monthly_income', 0)
+    years     = result.get('pension_years', 0)
+    st.markdown(f"""
+    <div class="result-card" style="text-align:center;">
+        <h3 style="color:#4F46E5; margin-bottom:20px;">💰 예상 월 연금액</h3>
+        <div style="font-size:36px; font-weight:bold; color:#1F2937; margin:20px 0;">{estimated:,.0f}만원</div>
+        <div style="font-size:16px; color:#666; margin-top:15px;">월소득 {income:,.0f}만원 × 가입기간 {years}년 기준</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if estimated >= 90:
+        ptype, desc = "완전노령연금", "만 65세부터 감액 없이 정액 수령이 가능합니다."
+    elif estimated >= 60:
+        ptype, desc = "조기노령연금", "만 60세부터 수령 가능하나 최대 30% 감액될 수 있습니다."
+    else:
+        ptype, desc = "감액노령연금", "일정 조건을 만족하지 못할 경우 감액되어 수령됩니다."
+    st.info(f"**{ptype}**: {desc}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("설문 + 맞춤 추천 받기"):
+            ss.page='survey_plus_custom'; st.rerun()
+    with c2:
+        if st.button("← 메인으로"):
+            ss.page='main'; st.rerun()
+
+
+# =========================
+# 노후 시뮬레이션 (참고코드 기능 이식)
+# =========================
+def render_simulation_page():
+    render_header("노후 시뮬레이션")
+
+    # 설문값(없으면 기본값)
+    if not ss.answers:
+        st.warning("먼저 설문을 완료하시면 더 정확한 시뮬레이션이 가능합니다.")
+        current_age, current_assets, pension, income, monthly_expense = 65, 5000, 100, 100, 150
+    else:
+        a = ss.answers
+        current_age     = _to_int(a.get('age'), 65)
+        current_assets  = _to_float(a.get('assets'), 5000)
+        pension         = _to_float(a.get('pension'), 0)
+        income          = _to_float(a.get('income'), 0)
+        monthly_expense = _to_float(a.get('living_cost'), 150)
+
+    monthly_income = pension + income
+    col1, col2, col3 = st.columns(3)
+    with col1: st.metric("현재 나이", f"{current_age}세")
+    with col2: st.metric("보유 자산", f"{current_assets:,.0f}만원")
+    with col3: st.metric("월 순수익", f"{monthly_income - monthly_expense:,.0f}만원")
+
+    # 기본/상품 적용 시뮬
+    base_return   = 0.02
+    invest_return = get_invest_return_from_risk(ss.get('risk_choice', '위험중립형'))
+
+    log_base, depletion_base = retirement_simulation(
+        current_age, 100, current_assets, monthly_income, monthly_expense,
+        inflation_rate=0.03, investment_return=base_return
+    )
+    log_invest, depletion_invest = simulate_with_financial_product(
+        current_age, 100, current_assets, monthly_income, monthly_expense,
+        invest_return=invest_return
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric(f"기본 시나리오(연 {int(base_return*100)}%) 고갈 나이",
+                  value=f"{depletion_base}세" if depletion_base else "고갈 없음")
+    with c2:
+        st.metric(f"금융상품 적용(연 {int(invest_return*100)}%) 고갈 나이",
+                  value=f"{depletion_invest}세" if depletion_invest else "고갈 없음")
+
+    # 가정값 조정 + 그래프
+    st.markdown("### ⚙️ 시뮬레이션 가정값")
+    with st.form("sim_form_only"):
+        colA, colB = st.columns(2)
+        with colA:
+            inflation_pct = st.slider("물가상승률(연, %)", 0.0, 8.0, 3.0, 0.1, key="sim_inflation_only")
+        with colB:
+            base_return_pct = st.slider("기본 시나리오 수익률(연, %)", 0.0, 6.0, 2.0, 0.1, key="sim_base_return_only")
+        submitted = st.form_submit_button("시뮬레이션 실행")
+
+    if submitted:
+        inflation = inflation_pct / 100.0
+        base_r    = base_return_pct / 100.0
+
+        log_base2, _ = retirement_simulation(
+            current_age, 100, current_assets, monthly_income, monthly_expense,
+            inflation_rate=inflation, investment_return=base_r
+        )
+        df_b = (pd.DataFrame(log_base2)[['나이','잔액']]
+                .rename(columns={'잔액':'기본 시나리오'}) if log_base2 else pd.DataFrame())
+
+        # 추천 결과가 있으면 상품별 탭 시나리오
+        has_reco = isinstance(ss.get('rec_df'), pd.DataFrame) and not ss.rec_df.empty
+        if has_reco:
+            st.markdown("### 📈 추천 상품별 적용 시나리오")
+            rec_records = ss.rec_df.to_dict(orient="records")
+            tabs = st.tabs([f"{i+1}. {r.get('상품명','-')}" for i, r in enumerate(rec_records)])
+
+            for tab, r in zip(tabs, rec_records):
+                with tab:
+                    # 예상수익률(연) → % 숫자
+                    if '예상수익률' in r and pd.notnull(r['예상수익률']):
+                        prod_return_pct = float(r['예상수익률']) * 100.0
+                    else:
+                        txt = str(r.get('예상수익률(연)','0')).replace('%','')
+                        try: prod_return_pct = float(txt)
+                        except: prod_return_pct = 5.0
+                    prod_r = prod_return_pct / 100.0
+
+                    log_prod2, _ = retirement_simulation(
+                        current_age, 100, current_assets, monthly_income, monthly_expense,
+                        inflation_rate=inflation, investment_return=prod_r
+                    )
+                    df_p = pd.DataFrame(log_prod2)[['나이','잔액']].rename(
+                        columns={'잔액': f"{r.get('상품명','-')} 적용"}
+                    )
+                    st.caption(
+                        f"가정 수익률: 기본 **{base_return_pct:.1f}%**, "
+                        f"해당 상품 **{prod_return_pct:.1f}%** · 물가상승률 **{inflation_pct:.1f}%**"
+                    )
+                    chart_df = (pd.merge(df_b, df_p, on='나이', how='outer').set_index('나이')
+                                if not df_b.empty else df_p.set_index('나이'))
+                    st.line_chart(chart_df)
+        else:
+            st.info("상품별 그래프는 ‘맞춤 상품 추천’에서 추천을 실행하면 표시됩니다.")
+
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("설문 + 맞춤 추천으로"):
+            ss.page = 'survey_plus_custom'; st.rerun()
+    with c2:
+        if st.button("← 메인으로"):
+            ss.page = 'main'; st.rerun()
+
+
+# =========================
+# 라우터
+# =========================
+def main():
+    if ss.page == 'main':
+        render_main_page()
+    elif ss.page == 'survey':
+        render_survey_page()
+    elif ss.page == 'survey_result':
+        render_survey_result_page()
+    elif ss.page == 'survey_plus_custom':
+        render_survey_plus_custom_page()
+    elif ss.page == 'pension_input':
+        render_pension_input_page()
+    elif ss.page == 'pension_result':
+        render_pension_result_page()
+    elif ss.page == 'simulation':
+        render_simulation_page()
+    elif ss.page == 'phone_consultation':
+        render_phone_consultation_page()
+
+if __name__ == "__main__":
+    main()
