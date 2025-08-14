@@ -496,8 +496,9 @@ def render_main_home():
             st.markdown('<div class="title">시니어 연금 계산기</div>', unsafe_allow_html=True)
 
         # 메뉴 버튼
+        # 메뉴 버튼 (순서: 유형보기 → 맞춤추천 → 시뮬레이션 → 연금계산 → 설문다시하기)
         st.markdown('<div class="menu">', unsafe_allow_html=True)
-
+        
         # 1) 내 금융 유형 보기
         if st.button("내 금융 유형 보기", key="home_btn_type"):
             if st.session_state.get("tabnet_label"):
@@ -505,29 +506,28 @@ def render_main_home():
             else:
                 st.session_state["flow"] = "survey"
             st.rerun()
-
-        # 2) 연금 계산하기
-        if st.button("연금 계산하기", key="home_btn_predict"):
-            st.session_state["flow"] = "predict"
-            st.rerun()
-
-        # 3) 노후 시뮬레이션
-        if st.button("노후  시뮬레이션", key="home_btn_sim"):
-            st.session_state["flow"] = "sim"
-            st.rerun()
-
-        # 4) 맞춤 상품 추천
+        
+        # 2) 맞춤 상품 추천
         if st.button("맞춤 상품 추천", key="home_btn_reco"):
             st.session_state["flow"] = "recommend"
             st.rerun()
-
+        
+        # 3) 노후 시뮬레이션
+        if st.button("노후 시뮬레이션", key="home_btn_sim"):
+            st.session_state["flow"] = "sim"
+            st.rerun()
+        
+        # 4) 연금 계산하기
+        if st.button("연금 계산하기", key="home_btn_predict"):
+            st.session_state["flow"] = "predict"
+            st.rerun()
+        
         # 5) 설문 다시하기  → 초기화 후 설문으로
         if st.button("설문 다시하기", key="home_btn_reset"):
-            # reset_app_state()를 이미 만들었다면 그걸 사용
             if "reset_app_state" in globals():
                 reset_app_state(go="survey")
             else:
-                # 예비: 최소한의 초기화
+                # 예비 초기화(이미 reset_app_state 있다면 불필요)
                 for k in [
                     "flow","pred_amount","answers","prefill_survey","pred_label",
                     "tabnet_label","rec_df","display_type","risk_choice",
@@ -536,8 +536,8 @@ def render_main_home():
                 ]: st.session_state.pop(k, None)
                 st.session_state["flow"] = "survey"
                 st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)  # /.menu
+        
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="caption">버튼을 눌러 다음 단계로 이동하세요</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)  # /.home-card
 
